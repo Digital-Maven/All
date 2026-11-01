@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p gridcraft-ui-egui --example snapshot -- [--sample sales] [--in file.xlsx]
 //!  [--size 1440x900] [--scale 2] [--cmd 'id={json}']... [--tab Insert] [--dark] [--language en|es|zh|ja|ko|ru|pt|de|cs|fr|tr]
-//!  [--dialog 'name={json}'] [--hf-edit header|footer] out.png`
+//!  [--dialog 'name={json}'] [--hf-edit header|footer] [--powerpivot data|diagram|measure|relationships|pivot|ribbon] out.png`
 
 use gridcraft_engine::Session;
 use gridcraft_ui_egui::SheetApp;
@@ -22,6 +22,7 @@ fn main() {
     let mut dialog: Option<String> = None;
     let mut language: Option<String> = None;
     let mut hf_edit: Option<String> = None;
+    let mut powerpivot: Option<String> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -70,6 +71,10 @@ fn main() {
             "--hf-edit" => {
                 i += 1;
                 hf_edit = args.get(i).cloned();
+            }
+            "--powerpivot" => {
+                i += 1;
+                powerpivot = args.get(i).cloned();
             }
             "--language" => {
                 i += 1;
@@ -120,6 +125,33 @@ fn main() {
                     let (name, p) =
                         d.split_once('=').map(|(a, b)| (a, serde_json::from_str(b).unwrap_or(json!({})))).unwrap_or((d.as_str(), json!({})));
                     app.open_dialog(name, p);
+                }
+                // Power Pivot: `data`, `diagram`, `measure`, `relationships`, `pivot` or `ribbon`.
+                if let Some(mode) = &powerpivot {
+                    use gridcraft_ui_egui::powerpivot::{self, Form, View};
+                    let list = |s: &str| s.split(',').filter(|x| !x.is_empty()).map(str::to_string).collect::<Vec<_>>();
+                    match mode.as_str() {
+                        "ribbon" => app.ui.ribbon_tab = "Power Pivot".into(),
+                        // `pivot:rows;columns;measures`, each comma-separated.
+                        m if m.starts_with("pivot:") => {
+                            let parts: Vec<&str> = m.trim_start_matches("pivot:").split(';').collect();
+                            let get = |i: usize| list(parts.get(i).copied().unwrap_or_default());
+                            app.powerpivot.form = Some(Form::pivot_with(get(0), get(1), get(2)));
+                        }
+                        "pivot" => app.powerpivot.form = Some(Form::pivot()),
+                        "relationships" => app.powerpivot.form = Some(Form::ManageRelationships),
+                        _ => {
+                            powerpivot::open(&mut app);
+                            app.powerpivot.calc_area = true;
+                            if mode == "diagram" {
+                                app.powerpivot.view = View::Diagram;
+                            }
+                            if mode == "measure" {
+                                let table = app.powerpivot.table.clone();
+                                app.powerpivot.form = Some(Form::new_measure(&table));
+                            }
+                        }
+                    }
                 }
                 // Page Layout view: edit the first page's centre header (or footer) section.
                 let active = app.session.active().and_then(|d| d.wb.active().cloned().map(|s| (d.wb.active_sheet(), s)));

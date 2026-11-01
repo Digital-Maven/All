@@ -28,6 +28,10 @@ pub struct PivotSpec {
 pub struct PivotGrid {
     pub grid: Vec<Vec<Value>>,
     pub header_rows: usize,
+    /// For each grid column, the index (into the spec's values) of the value it shows, if any.
+    pub value_columns: Vec<Option<usize>>,
+    /// The measure format (number format code) of each value, if it has one.
+    pub value_formats: Vec<Option<String>>,
 }
 
 fn field(m: &Model, f: &str) -> Result<(String, String)> {
@@ -40,13 +44,22 @@ fn field(m: &Model, f: &str) -> Result<(String, String)> {
     }
 }
 
-/// `(label, DAX)` of one value field.
+/// `(label, DAX)` of one value field: a measure name, `Label := expression` (an implicit
+/// measure such as `Sum of Amount := SUM(Sales[Amount])`), or a bare expression.
 fn value_field(m: &Model, v: &str) -> (String, String) {
+    if let Some((label, expr)) = v.split_once(":=") {
+        return (label.trim().to_string(), expr.trim().to_string());
+    }
     let bare = v.trim().trim_start_matches('[').trim_end_matches(']');
     match m.measure(bare) {
         Some(ms) => (ms.name.clone(), format!("[{}]", ms.name.replace(']', "]]"))),
         None => (v.trim().to_string(), v.to_string()),
     }
+}
+
+fn value_format(m: &Model, v: &str) -> Option<String> {
+    let bare = v.trim().trim_start_matches('[').trim_end_matches(']');
+    m.measure(bare).and_then(|ms| ms.format.clone()).filter(|f| !f.trim().is_empty())
 }
 
 fn label(tuple: &[Value]) -> Value {
@@ -68,6 +81,7 @@ pub fn layout(m: &Model, spec: &PivotSpec) -> Result<PivotGrid> {
         return Err(Error::Model("a PivotTable needs at least one value (measure)".into()));
     }
     let values: Vec<(String, String)> = spec.values.iter().map(|v| value_field(m, v)).collect();
+    let value_formats: Vec<Option<String>> = spec.values.iter().map(|v| value_format(m, v)).collect();
     let nv = values.len();
     let q = |g: &[(String, String)]| m.summarize(g, &values, &spec.filters);
     let col_name = |(_, c): &(String, String)| Value::text(c);
@@ -87,7 +101,9 @@ pub fn layout(m: &Model, spec: &PivotSpec) -> Result<PivotGrid> {
         total.resize(rows.len().max(1), Value::Blank);
         total.extend(q(&[])?.rows.into_iter().next().unwrap_or_else(|| vec![Value::Blank; nv]));
         grid.push(total);
-        return Ok(PivotGrid { grid, header_rows: 1 });
+        let lead = rows.len().max(1);
+        let value_columns = (0..lead + nv).map(|c| c.checked_sub(lead)).collect();
+        return Ok(PivotGrid { grid, header_rows: 1, value_columns, value_formats });
     }
 
     let nr = rows.len();
@@ -145,5 +161,7 @@ pub fn layout(m: &Model, spec: &PivotSpec) -> Result<PivotGrid> {
     }
     total.extend(grand);
     grid.push(total);
-    Ok(PivotGrid { grid, header_rows: 2 })
+    let width = lead + (col_keys.len() + 1) * nv;
+    let value_columns = (0..width).map(|c| c.checked_sub(lead).map(|k| k % nv)).collect();
+    Ok(PivotGrid { grid, header_rows: 2, value_columns, value_formats })
 }

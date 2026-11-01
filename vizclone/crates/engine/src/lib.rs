@@ -37,6 +37,7 @@ use serde_json::Value as Json;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command, register_test_command};
 pub use gridcraft_calc as calc;
 pub use gridcraft_core as core;
+pub use gridcraft_datamodel as datamodel;
 pub use gridcraft_formula as formula;
 pub use gridcraft_model as model;
 pub use gridcraft_numfmt as numfmt;

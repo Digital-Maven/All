@@ -19,6 +19,39 @@ the control channel and MCP can drive it.
 | Saved definition | `crates/datamodel/src/def.rs` | Tables, relationships, measures, calculated columns and reports, kept in the workbook (inside the `.xlsx`) and rebuilt from the tables' current data on demand. |
 | Commands | `crates/engine/src/cmd/powerpivot.rs` | The `powerpivot.*` commands below. Every change is one undo step. |
 
+## Using it in the app
+
+**Power Pivot tab** (main ribbon): Manage, Add to Data Model, Add All Tables, Refresh All,
+New Measure, Manage Measures, Calculated Column, Relationships, Create Relationship, Detect,
+Diagram View, PivotTable and Date Table.
+
+**Power Pivot window** (Manage; replaces the grid until Back to Workbook or Esc):
+
+- *Home* toolbar: Refresh, PivotTable, New Measure, Manage Measures, Calculated Column, Add All
+  Tables, Data View / Diagram View, Calculation Area.
+- *Design* toolbar: Create Relationship, Manage Relationships, Detect Relationships, New Date
+  Table, Remove Table, Delete Selected.
+- **Data View**: one tab per model table; the rows in a grid with a sticky header showing each
+  column's type and distinct count (calculated columns tinted); right-click a header to sort;
+  `+` adds a calculated column. The **formula bar** shows the selected measure (`Name := formula`)
+  or calculated column (`= formula`) and edits it in place; with nothing selected, typing
+  `Name := formula` and Enter adds a measure. The **calculation area** lists the table's measures
+  with their values (double-click to edit, right-click to delete).
+- **Diagram View**: tables as boxes in a star layout (data tables in the middle, lookup tables
+  around them); relationships drawn between the key columns with `*`/`1` ends and arrows for the
+  filter direction (dashed when inactive). Drag a column onto a column of another table to relate
+  them; click a line to select it (Make Active/Inactive, Filter direction, Delete); drag titles to
+  move boxes; double-click a title to open the table.
+
+**Forms**: New/Edit Measure (table, name, formula with Insert function / Insert field helpers,
+Check Formula, number format), Add/Edit Calculated Column (with a preview of the first values),
+Create/Edit Relationship, Manage Relationships, Manage Measures, New Date Table, and
+**PivotTable from Data Model**: a field list of every table's columns and measures (R/C/F/Σ to
+add to Rows, Columns, Filters, Values; Σ on a column makes an implicit Sum/Average/Count/Distinct
+Count/Min/Max), filters with value checklists, and a **live preview** of the result before it is
+inserted on a new or existing sheet. Inserted reports get bold headers and totals, the measures'
+number formats and fitted column widths.
+
 ## Commands
 
 | Command | Params |
@@ -33,6 +66,12 @@ the control channel and MCP can drive it.
 | `powerpivot.insertPivot` | `{rows?, columns?, values, filters?, at?, overwrite?}`: writes a data-model PivotTable (new sheet by default) |
 | `powerpivot.refresh` | `{report?}`: reloads the tables and rewrites the reports |
 | `powerpivot.deletePivot` | `{report}` |
+| `powerpivot.addAllTables` | `{}`: adds every workbook table not yet in the model |
+| `powerpivot.editMeasure` | `{name, newName?, expression?, table?, format?}`: reports follow a rename |
+| `powerpivot.editColumn` | `{table, name, expression?, newName?}` |
+| `powerpivot.editRelationship` | `{from, to, active?, crossFilter?}`: activating one turns off others between the same tables |
+| `powerpivot.detectRelationships` | `{}`: relates same-named columns, unique on one side, whose values match |
+| `powerpivot.newDateTable` | `{column: "Sales[OrderDate]", name?}`: whole-year calendar sheet + table, added and related (one undo step) |
 | `powerpivot.model` | Describes tables (rows, column types, cardinality, encoded size), relationships, measures and reports |
 | `powerpivot.evaluate` | `{expression, filters?}`: one DAX value |
 | `powerpivot.query` | `{query: "EVALUATE …"}`: a DAX query's result table |
@@ -77,5 +116,6 @@ gridcraft-cli run --in book.xlsx \
 - The store is rebuilt from the worksheet tables on each call (no cache yet), and filter
   propagation is recomputed per filter context, so very large models (millions of rows with many
   pivot cells) are slower than a dedicated engine.
-- No ribbon tab or Diagram View yet: the feature is reached through commands (command search,
-  CLI, control channel, MCP). Reports are static values that `powerpivot.refresh` rewrites.
+- Reports are static values that `powerpivot.refresh` rewrites (not an interactive PivotTable
+  with slicers, drill-down or subtotal layouts yet). No KPIs, hierarchies, perspectives, Sort by
+  Column or hidden columns. Diagram positions aren't saved with the workbook.

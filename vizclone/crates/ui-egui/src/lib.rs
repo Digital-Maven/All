@@ -43,6 +43,7 @@ pub mod outline;
 pub mod panes;
 pub mod paper_view;
 pub mod pivot_pane;
+pub mod powerpivot;
 pub mod printing;
 pub mod ribbon;
 pub mod selection_glide;
@@ -211,6 +212,8 @@ pub struct SheetApp {
     pub dialog: Option<dialogs::Dialog>,
     /// The File tab's Backstage view, when open (UI-only; replaces the ribbon, grid and tabs).
     pub backstage: Option<backstage::Backstage>,
+    /// The Power Pivot window and its forms (UI-only).
+    pub powerpivot: powerpivot::State,
     pub message: Option<(String, String)>,
     pub toast: Option<(String, f64)>,
     /// Dismissible info bar under the ribbon (open-time notices).

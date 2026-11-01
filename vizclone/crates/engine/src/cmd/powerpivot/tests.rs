@@ -148,3 +148,50 @@ fn every_powerpivot_command_survives_odd_params() {
         }
     }
 }
+
+#[test]
+fn add_all_detect_and_edit() {
+    let mut s = book();
+    let r = s.execute("powerpivot.addAllTables", json!({})).unwrap();
+    assert_eq!(r["added"].as_array().unwrap().len(), 3);
+    assert!(s.execute("powerpivot.addAllTables", json!({})).is_err());
+    // Same-named key columns, unique on the lookup side.
+    let r = s.execute("powerpivot.detectRelationships", json!({})).unwrap();
+    assert_eq!(r["created"].as_array().unwrap().len(), 2, "{r}");
+    s.execute("powerpivot.newMeasure", json!({"table": "Sales", "name": "Total", "expression": "SUM(Sales[Amount])", "format": "#,##0.00"})).unwrap();
+    assert_eq!(eval(&mut s, "[Total]", json!(["Customers[Region] = \"West\""])), json!(62.0));
+    let r = s.execute("powerpivot.insertPivot", json!({"rows": ["Customers[Region]"], "values": ["Total", "Rows := COUNTROWS(Sales)"]})).unwrap();
+    let sheet = r["sheet"].as_str().unwrap().to_string();
+    assert_eq!(value_at(&s, &sheet, "C1"), Value::text("Rows"));
+    assert_eq!(value_at(&s, &sheet, "C4"), Value::Number(6.0));
+    // The measure's format and bold totals reach the cells.
+    let wb = &s.doc().unwrap().wb;
+    let sh = wb.sheet(wb.sheet_index(&sheet).unwrap()).unwrap();
+    let st = wb.styles.get(sh.style_id(CellRef::parse("B2").unwrap()));
+    assert_eq!(st.num_fmt.as_str(), "#,##0.00");
+    assert!(wb.styles.get(sh.style_id(CellRef::parse("A4").unwrap())).font.bold);
+    // Renaming the measure keeps the report working.
+    s.execute("powerpivot.editMeasure", json!({"name": "Total", "newName": "Revenue", "expression": "SUM(Sales[Amount]) * 2"})).unwrap();
+    assert_eq!(value_at(&s, &sheet, "B1"), Value::text("Revenue"));
+    assert_eq!(value_at(&s, &sheet, "B4"), Value::Number(454.0));
+    // Turning a relationship off stops filters crossing it.
+    s.execute("powerpivot.editRelationship", json!({"from": "Sales[CustomerId]", "to": "Customers[CustomerId]", "active": false})).unwrap();
+    assert_eq!(eval(&mut s, "[Revenue]", json!(["Customers[Region] = \"West\""])), json!(454.0));
+}
+
+#[test]
+fn new_date_table_builds_a_related_calendar() {
+    let mut s = Session::new();
+    s.new_workbook();
+    let rows = json!([["Day", "Amount"], [46023, 10], [46100, 20], [46400, 5]]);
+    s.execute("range.setValues", json!({"range": "A1", "values": rows})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:B4", "name": "Orders"})).unwrap();
+    s.execute("powerpivot.addTable", json!({"table": "Orders"})).unwrap();
+    let r = s.execute("powerpivot.newDateTable", json!({"column": "Orders[Day]"})).unwrap();
+    assert_eq!(r["rows"], json!(365 + 365));
+    assert_eq!(eval(&mut s, "SUM(Orders[Amount])", json!(["Calendar[Year] = 2026"])), json!(30.0));
+    assert_eq!(eval(&mut s, "CALCULATE(SUM(Orders[Amount]), Calendar[Month] = \"January\")", json!([])), json!(15.0));
+    // One undo takes the whole thing back.
+    s.execute("edit.undo", json!({})).unwrap();
+    assert!(s.doc().unwrap().wb.table("Calendar").is_none());
+}

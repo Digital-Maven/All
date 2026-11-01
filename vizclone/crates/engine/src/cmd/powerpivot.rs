@@ -79,6 +79,44 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!("powerpivot.refresh", "Refresh All", ["Power Pivot", "Data Model"], None, "{report?: id}", has_doc, refresh),
         cmd!("powerpivot.deletePivot", "Delete Data Model PivotTable", ["Power Pivot", "Reports"], None, "{report: id}", has_doc, delete_pivot),
+        cmd!("powerpivot.addAllTables", "Add All Tables to Data Model", ["Power Pivot", "Tables"], None, "{}", has_doc, add_all_tables),
+        cmd!(
+            "powerpivot.editMeasure",
+            "Edit Measure",
+            ["Power Pivot", "Calculations"],
+            None,
+            "{name: \"Total Sales\", newName?, expression?, table?, format?}",
+            has_doc,
+            edit_measure
+        ),
+        cmd!(
+            "powerpivot.editRelationship",
+            "Edit Relationship",
+            ["Power Pivot", "Relationships"],
+            None,
+            "{from: \"Sales[ProductId]\", to: \"Products[ProductId]\", active?: true, crossFilter?: \"single\"|\"both\"}",
+            has_doc,
+            edit_relationship
+        ),
+        cmd!(
+            "powerpivot.editColumn",
+            "Edit Calculated Column",
+            ["Power Pivot", "Calculations"],
+            None,
+            "{table: \"Sales\", name: \"Margin\", expression?, newName?}",
+            has_doc,
+            edit_column
+        ),
+        cmd!("powerpivot.detectRelationships", "Detect Relationships", ["Power Pivot", "Relationships"], None, "{}", has_doc, detect_relationships),
+        cmd!(
+            "powerpivot.newDateTable",
+            "New Date Table",
+            ["Power Pivot", "Calendars"],
+            None,
+            "{column: \"Sales[OrderDate]\", name?: \"Calendar\"}",
+            has_doc,
+            new_date_table
+        ),
         cmd!(query "powerpivot.model", "Manage Data Model", ["Power Pivot", "Data Model"], None, "{}", has_doc, describe),
         cmd!(query "powerpivot.evaluate", "Evaluate DAX", ["Power Pivot", "Data Model"], None, "{expression: \"[Total Sales]\", filters?: [\"Products[Category] = \\\"Office\\\"\"]}", has_doc, evaluate),
         cmd!(query "powerpivot.query", "DAX Query", ["Power Pivot", "Data Model"], None, "{query: \"EVALUATE VALUES(Products[Category])\"}", has_doc, query),
@@ -329,6 +367,220 @@ fn delete_column(s: &mut Session, p: &Json) -> Result<Json> {
     })
 }
 
+fn add_all_tables(s: &mut Session, _: &Json) -> Result<Json> {
+    let names: Vec<String> = s.doc()?.wb.sheets.iter().flat_map(|sh| sh.tables.iter().map(|t| t.name.clone())).collect();
+    change(s, "powerpivot.addAllTables", |_, def| {
+        let mut added = Vec::new();
+        for n in names {
+            if !def.has_table(&n) {
+                def.tables.push(TableDef { name: n.clone() });
+                added.push(n);
+            }
+        }
+        if added.is_empty() {
+            return Err(bad("powerpivot.addAllTables", "every table in the workbook is already in the data model"));
+        }
+        Ok(json!({ "added": added }))
+    })
+}
+
+fn edit_measure(s: &mut Session, p: &Json) -> Result<Json> {
+    const CMD: &str = "powerpivot.editMeasure";
+    let name = req(p, "name", CMD)?.to_string();
+    let new_name = str_param(p, "newName").map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    let expression = str_param(p, "expression").map(str::to_string);
+    let table = str_param(p, "table").map(str::to_string);
+    let format = p.get("format").map(|f| f.as_str().map(str::to_string).filter(|f| !f.trim().is_empty()));
+    change(s, CMD, |_, def| {
+        let m = def.measures.iter_mut().find(|m| m.name.eq_ignore_ascii_case(&name)).ok_or_else(|| bad(CMD, format!("no measure named `{name}`")))?;
+        let old = m.name.clone();
+        if let Some(n) = new_name {
+            m.name = n;
+        }
+        if let Some(e) = expression {
+            m.expression = e;
+        }
+        if let Some(t) = table {
+            m.table = t;
+        }
+        if let Some(f) = format {
+            m.format = f;
+        }
+        let renamed = (!m.name.eq_ignore_ascii_case(&old)).then(|| m.name.clone());
+        // Reports that show the measure follow its new name.
+        if let Some(n) = renamed {
+            for r in &mut def.reports {
+                for v in &mut r.values {
+                    if v.trim().trim_start_matches('[').trim_end_matches(']').eq_ignore_ascii_case(&old) {
+                        *v = n.clone();
+                    }
+                }
+            }
+        }
+        Ok(Json::Null)
+    })
+}
+
+fn edit_relationship(s: &mut Session, p: &Json) -> Result<Json> {
+    const CMD: &str = "powerpivot.editRelationship";
+    let a = column_param(p, "from", CMD)?;
+    let b = column_param(p, "to", CMD)?;
+    let active = bool_param(p, "active");
+    let cross = match str_param(p, "crossFilter").map(str::to_ascii_lowercase).as_deref() {
+        None => None,
+        Some("single") | Some("one") => Some(CrossFilter::Single),
+        Some("both") => Some(CrossFilter::Both),
+        Some(other) => return Err(bad(CMD, format!("crossFilter is \"single\" or \"both\", not \"{other}\""))),
+    };
+    change(s, CMD, |_, def| {
+        let same = |x: &(String, String), t: &str, c: &str| x.0.eq_ignore_ascii_case(t) && x.1.eq_ignore_ascii_case(c);
+        let pos = def
+            .relationships
+            .iter()
+            .position(|r| {
+                (same(&a, &r.from_table, &r.from_column) && same(&b, &r.to_table, &r.to_column))
+                    || (same(&b, &r.from_table, &r.from_column) && same(&a, &r.to_table, &r.to_column))
+            })
+            .ok_or_else(|| bad(CMD, "there is no relationship between those columns"))?;
+        if active == Some(true) {
+            // Only one active relationship between two tables: activating one turns the others off.
+            let (t1, t2) = def.relationships.get(pos).map(|r| (r.from_table.to_lowercase(), r.to_table.to_lowercase())).unwrap_or_default();
+            for (i, r) in def.relationships.iter_mut().enumerate() {
+                let pair = (r.from_table.to_lowercase(), r.to_table.to_lowercase());
+                if i != pos && (pair == (t1.clone(), t2.clone()) || pair == (t2.clone(), t1.clone())) {
+                    r.active = false;
+                }
+            }
+        }
+        if let Some(r) = def.relationships.get_mut(pos) {
+            if let Some(v) = active {
+                r.active = v;
+            }
+            if let Some(c) = cross {
+                r.cross_filter = c;
+            }
+        }
+        Ok(Json::Null)
+    })
+}
+
+fn edit_column(s: &mut Session, p: &Json) -> Result<Json> {
+    const CMD: &str = "powerpivot.editColumn";
+    let table = req(p, "table", CMD)?.to_string();
+    let name = req(p, "name", CMD)?.to_string();
+    let expression = str_param(p, "expression").map(str::to_string);
+    let new_name = str_param(p, "newName").map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    change(s, CMD, |_, def| {
+        let c = def
+            .calculated_columns
+            .iter_mut()
+            .find(|c| c.table.eq_ignore_ascii_case(&table) && c.name.eq_ignore_ascii_case(&name))
+            .ok_or_else(|| bad(CMD, format!("`{table}` has no calculated column named `{name}`")))?;
+        if let Some(e) = expression {
+            c.expression = e;
+        }
+        if let Some(n) = new_name {
+            c.name = n;
+        }
+        Ok(Json::Null)
+    })
+}
+
+fn detect_relationships(s: &mut Session, _: &Json) -> Result<Json> {
+    let found = model(s)?.suggest_relationships();
+    if found.is_empty() {
+        return Ok(json!({ "created": [] }));
+    }
+    change(s, "powerpivot.detectRelationships", |_, def| {
+        let mut created = Vec::new();
+        for ((ft, fc), (tt, tc)) in found {
+            created.push(format!("{ft}[{fc}] → {tt}[{tc}]"));
+            def.relationships.push(RelationshipDef {
+                from_table: ft,
+                from_column: fc,
+                to_table: tt,
+                to_column: tc,
+                cross_filter: CrossFilter::Single,
+                active: true,
+            });
+        }
+        Ok(json!({ "created": created }))
+    })
+}
+
+/// A calendar table covering whole years from the earliest to the latest date in `column`, added
+/// to the model and related to that column (one undo step).
+fn new_date_table(s: &mut Session, p: &Json) -> Result<Json> {
+    const CMD: &str = "powerpivot.newDateTable";
+    let (table, column) = column_param(p, "column", CMD)?;
+    let name = str_param(p, "name").map(str::trim).filter(|n| !n.is_empty()).unwrap_or("Calendar").to_string();
+    let m = model(s)?;
+    let (ti, ci) = m.column_ref(&table, &column).map_err(model_err)?;
+    let col = m.tables.get(ti).and_then(|t| t.column(ci)).ok_or_else(|| bad(CMD, "no such column"))?;
+    let dates: Vec<f64> =
+        (0..col.cardinality() as u32).filter_map(|id| col.dict_value(id).as_number()).filter(|d| (1.0..=2_958_465.0).contains(d)).collect();
+    let (Some(lo), Some(hi)) = (dates.iter().copied().reduce(f64::min), dates.iter().copied().reduce(f64::max)) else {
+        return Err(bad(CMD, format!("{table}[{column}] holds no dates")));
+    };
+    use gridcraft_datamodel::dates::{to_date, ymd};
+    let (Some(d0), Some(d1)) = (to_date(lo), to_date(hi)) else { return Err(bad(CMD, "the dates are out of range")) };
+    use chrono::Datelike;
+    let (Some(start), Some(end)) = (ymd(d0.year(), 1, 1), ymd(d1.year(), 12, 31)) else { return Err(bad(CMD, "the dates are out of range")) };
+    if end - start > 366.0 * 60.0 {
+        return Err(bad(CMD, "the dates span more than 60 years"));
+    }
+    if s.doc()?.wb.table(&name).is_some() {
+        return Err(bad(CMD, format!("a table named `{name}` already exists")));
+    }
+    const MONTHS: [&str; 12] =
+        ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    let mut rows = vec![json!(["Date", "Year", "Quarter", "Month Number", "Month", "Year Month", "Day", "Day of Week", "Weekday"])];
+    let mut d = start;
+    while d <= end {
+        if let Some(dt) = to_date(d) {
+            let mi = dt.month0() as usize;
+            let wd = dt.weekday().num_days_from_sunday() as usize;
+            rows.push(json!([
+                d,
+                dt.year(),
+                format!("Q{}", mi / 3 + 1),
+                mi + 1,
+                MONTHS.get(mi).copied().unwrap_or_default(),
+                format!("{}-{:02}", dt.year(), mi + 1),
+                dt.day(),
+                wd + 1,
+                DAYS.get(wd).copied().unwrap_or_default()
+            ]));
+        }
+        d += 1.0;
+    }
+    let n = rows.len();
+    s.grouped("New Date Table", |s| {
+        let sheet_name = (1..)
+            .map(|i| if i == 1 { name.clone() } else { format!("{name} {i}") })
+            .find(|n| s.doc().map(|d| d.wb.sheet_index(n).is_none()).unwrap_or(false))
+            .unwrap_or_default();
+        let end = s.doc()?.wb.sheets.len();
+        let r = s.execute("home.insertSheet", json!({ "name": sheet_name, "before": end }))?;
+        let si = r["index"].as_u64().unwrap_or(end as u64);
+        s.execute("sheet.activate", json!({ "sheet": si }))?;
+        s.execute("range.setValues", json!({ "range": "A1", "values": rows, "parse": false }))?;
+        s.execute("home.numberFormat", json!({ "range": format!("A2:A{n}"), "code": "yyyy-mm-dd" }))?;
+        s.execute("insert.table", json!({ "range": format!("A1:I{n}"), "name": name }))?;
+        s.execute("powerpivot.addTable", json!({ "table": name }))?;
+        s.execute(
+            "powerpivot.createRelationship",
+            json!({ "from": format!("{}[{}]", quote(&table), column), "to": format!("{}[Date]", quote(&name)) }),
+        )?;
+        Ok(json!({ "table": name, "rows": n - 1 }))
+    })
+}
+
+fn quote(t: &str) -> String {
+    gridcraft_datamodel::model::quote_table(t)
+}
+
 // ---------------------------------------------------------------- queries
 
 fn describe(s: &mut Session, _: &Json) -> Result<Json> {
@@ -364,7 +616,23 @@ fn free_sheet_name(wb: &Workbook) -> String {
         .unwrap_or_default()
 }
 
+/// Inserts the report and fits its columns to their contents, as one undo step.
 fn insert_pivot(s: &mut Session, p: &Json) -> Result<Json> {
+    s.grouped("PivotTable from Data Model", |s| {
+        let r = insert_pivot_cells(s, p)?;
+        let (Some(sheet), Some(at), Some(cols)) = (r["sheet"].as_str(), r["at"].as_str().and_then(CellRef::parse), r["columns"].as_u64()) else {
+            return Ok(r);
+        };
+        if cols > 0 {
+            let last = (at.col as u64 + cols - 1).min(gridcraft_core::MAX_COLS as u64 - 1) as u32;
+            let range = gridcraft_core::RangeRef::cols(at.col, last).a1();
+            let _ = s.execute("home.autofitColumnWidth", json!({ "sheet": sheet, "cols": range }));
+        }
+        Ok(r)
+    })
+}
+
+fn insert_pivot_cells(s: &mut Session, p: &Json) -> Result<Json> {
     const CMD: &str = "powerpivot.insertPivot";
     let spec = PivotSpec {
         rows: string_list(p, "rows"),
@@ -479,6 +747,49 @@ fn clear_extent(cx: &mut super::Ctx, r: &ReportDef) {
     cx.changed.extend(cleared);
 }
 
+/// Header rows and the grand-total row in bold; value cells in their measure's number format.
+fn style_report(cx: &mut super::Ctx, si: usize, at: CellRef, grid: &gridcraft_datamodel::pivot::PivotGrid) {
+    let last = grid.grid.len().saturating_sub(1);
+    let mut wanted = Vec::new();
+    for (dr, line) in grid.grid.iter().enumerate() {
+        for dc in 0..line.len() {
+            let bold = dr < grid.header_rows || dr == last;
+            let fmt = if dr >= grid.header_rows {
+                grid.value_columns.get(dc).copied().flatten().and_then(|v| grid.value_formats.get(v).cloned().flatten())
+            } else {
+                None
+            };
+            if !bold && fmt.is_none() {
+                continue;
+            }
+            let (Ok(r), Ok(c)) = (u32::try_from(dr), u32::try_from(dc)) else { continue };
+            let cell = CellRef::new(at.row.saturating_add(r), at.col.saturating_add(c));
+            if cell.row >= gridcraft_core::MAX_ROWS || cell.col >= gridcraft_core::MAX_COLS {
+                continue;
+            }
+            wanted.push((cell, bold, fmt));
+        }
+    }
+    let mut ids = Vec::with_capacity(wanted.len());
+    for (cell, bold, fmt) in wanted {
+        let base = cx.wb.sheet(si).map(|sh| sh.style_id(cell)).unwrap_or_default();
+        let id = cx.wb.styles.derive(base, |st| {
+            if bold {
+                st.font.bold = true;
+            }
+            if let Some(f) = &fmt {
+                st.num_fmt = gridcraft_model::NumFmt::new(f);
+            }
+        });
+        ids.push((cell, id));
+    }
+    if let Some(sh) = cx.wb.sheet_mut(si) {
+        for (cell, id) in ids {
+            sh.set_style(cell, id);
+        }
+    }
+}
+
 /// Recomputes and writes every report (or only `only`); a report whose sheet is gone, or whose
 /// fields no longer exist, is left as it was. Returns how many were written.
 fn rewrite_reports(cx: &mut super::Ctx, m: &Model, def: &mut DataModelDef, only: Option<u32>) -> Result<usize> {
@@ -504,6 +815,7 @@ fn rewrite_reports(cx: &mut super::Ctx, m: &Model, def: &mut DataModelDef, only:
             }
         }
         cx.changed.extend(changed);
+        style_report(cx, si, at, &grid);
         r.extent = (grid.grid.len() as u32, grid.grid.iter().map(Vec::len).max().unwrap_or(0) as u32);
         written += 1;
     }

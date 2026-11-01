@@ -24,6 +24,7 @@ gridcraft-xlsx = { workspace = true }
 gridcraft-chart = { workspace = true }
 gridcraft-pdf = { workspace = true }
 gridcraft-datamodel = { workspace = true }
+chrono = { workspace = true }
 image = { workspace = true }
 
 [dev-dependencies]

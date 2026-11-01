@@ -110,6 +110,53 @@ impl Model {
         Ok(self.relationships.len() - 1)
     }
 
+    /// Relationships the data suggests: for two tables not yet related, a column with the same
+    /// name in both, unique on one side but not the other, whose values match (most of the many
+    /// side's keys are found on the lookup side). Returned as (many side, one side).
+    pub fn suggest_relationships(&self) -> Vec<((String, String), (String, String))> {
+        let mut out = Vec::new();
+        for (ai, a) in self.tables.iter().enumerate() {
+            for (bi, b) in self.tables.iter().enumerate().skip(ai + 1) {
+                let related = self.relationships.iter().any(|r| (r.from_table == ai && r.to_table == bi) || (r.from_table == bi && r.to_table == ai));
+                if related {
+                    continue;
+                }
+                let found = a.columns.iter().enumerate().find_map(|(ac, col)| {
+                    let bc = b.column_index(&col.name)?;
+                    let (ua, ub) = (is_unique(a, ac), is_unique(b, bc));
+                    let (many, one) = match (ua, ub) {
+                        (false, true) => ((ai, ac), (bi, bc)),
+                        (true, false) => ((bi, bc), (ai, ac)),
+                        _ => return None,
+                    };
+                    self.keys_match(many, one).then_some((many, one))
+                });
+                if let Some(((mt, mc), (ot, oc))) = found {
+                    let name = |t: usize, c: usize| {
+                        let tb = self.tables.get(t);
+                        (tb.map(|x| x.name.clone()).unwrap_or_default(), tb.and_then(|x| x.column(c)).map(|x| x.name.clone()).unwrap_or_default())
+                    };
+                    out.push((name(mt, mc), name(ot, oc)));
+                }
+            }
+        }
+        out
+    }
+
+    /// True when at least half of the many side's distinct non-blank keys exist on the one side.
+    fn keys_match(&self, many: (usize, usize), one: (usize, usize)) -> bool {
+        let (Some(mc), Some(oc)) = (self.tables.get(many.0).and_then(|t| t.column(many.1)), self.tables.get(one.0).and_then(|t| t.column(one.1)))
+        else {
+            return false;
+        };
+        let keys: Vec<_> = (0..mc.cardinality() as u32).map(|id| mc.dict_value(id)).filter(|v| !v.is_blank()).collect();
+        if keys.is_empty() {
+            return false;
+        }
+        let hits = keys.iter().filter(|v| oc.id_of(&v.key()).is_some()).count();
+        hits * 2 >= keys.len()
+    }
+
     pub fn measure(&self, name: &str) -> Option<&Measure> {
         self.measures.iter().find(|m| m.name.eq_ignore_ascii_case(name))
     }

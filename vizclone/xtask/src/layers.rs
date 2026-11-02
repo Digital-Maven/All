@@ -32,6 +32,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("formula", Class::Layer(1)),
     ("functions", Class::Layer(1)),
     ("datamodel", Class::Layer(1)),
+    ("query", Class::Layer(1)),
     ("model", Class::Layer(2)),
     ("calc", Class::Layer(2)),
     ("xlsx", Class::Layer(2)),

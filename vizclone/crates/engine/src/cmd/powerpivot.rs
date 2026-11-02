@@ -178,9 +178,13 @@ fn source(wb: &Workbook, name: &str) -> Option<SourceData> {
     Some(SourceData { headers, rows })
 }
 
-/// Builds the model from `def` and the workbook's tables.
+/// Builds the model from `def` and the workbook's tables (and Power Query queries).
 fn build(wb: &Workbook, def: &DataModelDef) -> Result<Model> {
-    def.build(&|name| source(wb, name)).map_err(model_err)
+    def.build(&|name| match def.tables.iter().find(|t| t.name == name).and_then(|t| t.query.as_deref()) {
+        Some(q) => super::powerquery::source_data(wb, q),
+        None => source(wb, name),
+    })
+    .map_err(model_err)
 }
 
 fn model_err(e: gridcraft_datamodel::Error) -> EngineError {
@@ -253,7 +257,7 @@ fn add_table(s: &mut Session, p: &Json) -> Result<Json> {
         if def.has_table(&name) {
             return Err(bad("powerpivot.addTable", format!("`{name}` is already in the data model")));
         }
-        def.tables.push(TableDef { name: name.clone() });
+        def.tables.push(TableDef { name: name.clone(), query: None });
         Ok(json!({ "table": name }))
     })
 }
@@ -373,7 +377,7 @@ fn add_all_tables(s: &mut Session, _: &Json) -> Result<Json> {
         let mut added = Vec::new();
         for n in names {
             if !def.has_table(&n) {
-                def.tables.push(TableDef { name: n.clone() });
+                def.tables.push(TableDef { name: n.clone(), query: None });
                 added.push(n);
             }
         }

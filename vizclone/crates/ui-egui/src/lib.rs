@@ -44,6 +44,7 @@ pub mod panes;
 pub mod paper_view;
 pub mod pivot_pane;
 pub mod powerpivot;
+pub mod powerquery;
 pub mod printing;
 pub mod ribbon;
 pub mod selection_glide;
@@ -214,6 +215,8 @@ pub struct SheetApp {
     pub backstage: Option<backstage::Backstage>,
     /// The Power Pivot window and its forms (UI-only).
     pub powerpivot: powerpivot::State,
+    /// The Power Query Editor and its dialogs (UI-only).
+    pub powerquery: powerquery::State,
     pub message: Option<(String, String)>,
     pub toast: Option<(String, f64)>,
     /// Dismissible info bar under the ribbon (open-time notices).

@@ -23,6 +23,7 @@ fn main() {
     let mut language: Option<String> = None;
     let mut hf_edit: Option<String> = None;
     let mut powerpivot: Option<String> = None;
+    let mut powerquery: Option<String> = None;
     let mut out = "snapshot.png".to_string();
     let mut i = 0;
     while i < args.len() {
@@ -71,6 +72,10 @@ fn main() {
             "--hf-edit" => {
                 i += 1;
                 hf_edit = args.get(i).cloned();
+            }
+            "--powerquery" => {
+                i += 1;
+                powerquery = args.get(i).cloned();
             }
             "--powerpivot" => {
                 i += 1;
@@ -150,6 +155,47 @@ fn main() {
                                 let table = app.powerpivot.table.clone();
                                 app.powerpivot.form = Some(Form::new_measure(&table));
                             }
+                        }
+                    }
+                }
+                // Power Query: `editor`, `examples`, `profile`, `deps`, `ribbon`, or a dialog
+                // (`getdata`, `groupby`, `merge`, `advanced`, `custom`, `conditional`).
+                if let Some(mode) = &powerquery {
+                    use gridcraft_ui_egui::powerquery::{self, Dialog};
+                    if mode == "ribbon" {
+                        app.ui.ribbon_tab = "Power Query".into();
+                    } else {
+                        powerquery::open(&mut app, Some("Sales"));
+                        let tab = match mode.as_str() {
+                            "transform" => 1,
+                            "add" | "examples" => 2,
+                            "view" | "profile" => 3,
+                            _ => 0,
+                        };
+                        app.powerquery.tab = tab;
+                        match mode.as_str() {
+                            "examples" => {
+                                let mut ex =
+                                    powerquery::Examples { name: "First Name".into(), inputs: vec!["Customer".into()], ..Default::default() };
+                                ex.values.insert(0, "John".into());
+                                ex.values.insert(1, "Mary".into());
+                                app.powerquery.examples = Some(ex);
+                            }
+                            "profile" => {
+                                app.powerquery.view.profile = true;
+                                app.powerquery.selected = vec!["Amount".into()];
+                            }
+                            "deps" => app.powerquery.deps = true,
+                            "getdata" => app.powerquery.dialog = Some(Dialog::get_data("csv")),
+                            "groupby" => {
+                                app.powerquery.selected = vec!["Region".into()];
+                                app.powerquery.dialog = Some(Dialog::group_by(&mut app));
+                            }
+                            "merge" => app.powerquery.dialog = Some(Dialog::merge(&mut app, false)),
+                            "advanced" => app.powerquery.dialog = Some(Dialog::advanced(&mut app)),
+                            "custom" => app.powerquery.dialog = Some(Dialog::custom_column(&mut app)),
+                            "conditional" => app.powerquery.dialog = Some(Dialog::conditional(&mut app)),
+                            _ => {}
                         }
                     }
                 }

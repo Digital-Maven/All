@@ -15,6 +15,7 @@ pub mod inspect;
 pub mod macros;
 pub mod pivot;
 pub mod powerpivot;
+pub mod powerquery;
 pub mod print;
 pub mod review;
 pub mod sheet;
@@ -151,6 +152,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(solver::specs());
         v.extend(pivot::specs());
         v.extend(powerpivot::specs());
+        v.extend(powerquery::specs());
         v.extend(slicer::specs());
         v.extend(whatif::specs());
         v.extend(forecast::specs());

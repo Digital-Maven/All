@@ -26,7 +26,7 @@ use crate::theme::Tokens;
 
 mod data_view;
 mod diagram;
-mod forms;
+pub(crate) mod forms;
 
 pub use forms::Form;
 

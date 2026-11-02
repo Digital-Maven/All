@@ -2031,6 +2031,7 @@ dependencies = [
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-pdf",
+ "gridcraft-query",
  "gridcraft-xlsx",
  "image",
  "log",
@@ -2089,6 +2090,16 @@ dependencies = [
 [[package]]
 name = "gridcraft-pdf"
 version = "0.13.0"
+
+[[package]]
+name = "gridcraft-query"
+version = "0.13.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "gridcraft-ui-egui"

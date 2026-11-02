@@ -1,6 +1,9 @@
 > **VizClone** — this repository is GridCraft extended with **Power Pivot**: a native, pure-Rust
 > data model engine (columnar storage, relationships, DAX measures, calculated columns,
-> time intelligence and data-model PivotTables). See [docs/power-pivot.md](docs/power-pivot.md).
+> time intelligence and data-model PivotTables), and **Power Query** (an M engine with ~300 functions,
+> the Power Query Editor, Column From Examples, profiling, merges/appends, parameters, and loading to
+> sheets or the data model). See [docs/power-pivot.md](docs/power-pivot.md) and
+> [docs/power-query.md](docs/power-query.md).
 > Based on [storytold/gridcraft](https://github.com/storytold/gridcraft) (MIT OR Apache-2.0).
 
 <p align="center">

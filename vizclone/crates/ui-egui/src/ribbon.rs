@@ -20,6 +20,7 @@ mod home;
 mod insert;
 mod page_layout;
 mod powerpivot;
+mod powerquery;
 mod review;
 mod shortcuts;
 mod title_bar;
@@ -36,13 +37,14 @@ use home::home;
 use insert::{draw, insert};
 use page_layout::page_layout;
 use powerpivot::power_pivot;
+use powerquery::power_query;
 use review::review;
 pub use shortcuts::shortcut;
 pub use title_bar::{MAC_CONTENT_LEFT, MAC_TITLE_BAR, TITLE_LEFT_PAD, title_bar};
 use title_bar::{TITLE_BAR_H, TITLE_CONTROL_H};
 use view::view;
 
-pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate", "Power Pivot"];
+pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate", "Power Query", "Power Pivot"];
 const _: () = assert!(TITLE_CONTROL_H < TITLE_BAR_H, "title-bar controls keep a margin above and below");
 
 /// Draws the ribbon tabs and the active tab's horizontally scrollable card, resetting an unavailable contextual tab to Home.
@@ -154,6 +156,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             "View" => view(app, ui),
                             "Automate" => automate(app, ui),
                             "Power Pivot" => power_pivot(app, ui),
+                            "Power Query" => power_query(app, ui),
                             "Table Design" => table_design(app, ui),
                             "Chart Design" => chart_design(app, ui),
                             crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),

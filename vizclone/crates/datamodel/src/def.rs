@@ -24,11 +24,14 @@ pub struct DataModelDef {
     pub reports: Vec<ReportDef>,
 }
 
-/// A model table loaded from a worksheet table of the same name.
+/// A model table, loaded from the worksheet table of the same name, or from a Power Query
+/// query when `query` names one.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableDef {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

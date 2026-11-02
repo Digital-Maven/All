@@ -8,7 +8,7 @@ use super::updates_ui;
 use super::{
     CellRef, HashMap, INTERFACE_SCALE_MAX, INTERFACE_SCALE_MIN, Json, Notice, Perf, RangeRef, Session, SheetApp, UiRequest, UiState, backstage,
     clamp_interface_scale, clean_error, control, desktop_theme, dialogs, editor, floating_pictures, formula_bar, formula_locale, grid, i18n, json,
-    keytips, macro_ui, panes, pivot_pane, powerpivot, printing, ribbon, tabs, text_box, theme, widgets,
+    keytips, macro_ui, panes, pivot_pane, powerpivot, powerquery, printing, ribbon, tabs, text_box, theme, widgets,
 };
 
 mod clipboard;
@@ -36,6 +36,7 @@ impl SheetApp {
             dialog: None,
             backstage: None,
             powerpivot: Default::default(),
+            powerquery: Default::default(),
             message: None,
             toast: None,
             notice: None,
@@ -218,6 +219,9 @@ impl SheetApp {
         if self.backstage.is_some() {
             // File tab: the Backstage view replaces everything below the title bar.
             backstage::show(self, ui);
+        } else if self.powerquery.open {
+            // The Power Query Editor replaces the ribbon, formula bar, grid and sheet tabs.
+            powerquery::show(self, ui);
         } else if self.powerpivot.open {
             // The Power Pivot window replaces the ribbon, formula bar, grid and sheet tabs.
             powerpivot::show(self, ui);
@@ -241,6 +245,7 @@ impl SheetApp {
         }
         dialogs::show(self, &ctx);
         powerpivot::forms(self, &ctx);
+        powerquery::dialogs(self, &ctx);
         macro_ui::forget_closed_editor(self);
         macro_ui::question_box(self, &ctx);
         widgets::message_box(self, &ctx);

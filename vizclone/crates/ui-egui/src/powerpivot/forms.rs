@@ -254,12 +254,12 @@ fn quote(t: &str) -> String {
 }
 
 /// Gives a combo box (or other unlabelled control) its accessible name.
-pub(super) fn name(r: &egui::Response, label: &str) {
+pub(crate) fn name(r: &egui::Response, label: &str) {
     let label = label.to_string();
     r.widget_info(move || egui::WidgetInfo::labeled(egui::Role::ComboBox, true, label.clone()));
 }
 
-fn combo(ui: &mut Ui, id: &str, label: &str, selected: &mut String, options: &[String], width: f32) {
+pub(crate) fn combo(ui: &mut Ui, id: &str, label: &str, selected: &mut String, options: &[String], width: f32) {
     let shown = if selected.is_empty() { "Choose…".to_string() } else { selected.clone() };
     let r = craft_ui::ComboBox::from_id_salt(id).width(width).selected_text(shown).show_ui(ui, |ui| {
         for o in options {
@@ -320,18 +320,18 @@ fn formula_helpers(ui: &mut Ui, id: &str, m: &Model, expr: &mut String, measures
     });
 }
 
-fn error_line(ui: &mut Ui, t: &Tokens, e: &Option<String>) {
+pub(crate) fn error_line(ui: &mut Ui, t: &Tokens, e: &Option<String>) {
     if let Some(e) = e {
         ui.colored_label(t.danger, e);
     }
 }
 
-fn window(title: &str) -> egui::Window<'static> {
+pub(crate) fn window(title: &str) -> egui::Window<'static> {
     egui::Window::new(title.to_string()).collapsible(false).resizable(true).pivot(egui::Align2::CENTER_CENTER).default_pos(egui::pos2(0.0, 0.0))
 }
 
 /// Centres a form in the screen and keeps it inside it.
-fn fit(w: egui::Window<'static>, ctx: &egui::Context, size: egui::Vec2) -> egui::Window<'static> {
+pub(crate) fn fit(w: egui::Window<'static>, ctx: &egui::Context, size: egui::Vec2) -> egui::Window<'static> {
     let screen = ctx.content_rect();
     let size = vec2(size.x.min(screen.width() - 40.0), size.y.min(screen.height() - 60.0));
     w.default_pos(screen.center()).default_size(size).max_height(screen.height() - 40.0).max_width(screen.width() - 20.0)
@@ -363,7 +363,7 @@ pub(super) fn show(app: &mut SheetApp, ctx: &egui::Context) {
     }
 }
 
-fn ok_cancel(ui: &mut Ui, ok_label: &str) -> (bool, bool) {
+pub(crate) fn ok_cancel(ui: &mut Ui, ok_label: &str) -> (bool, bool) {
     let mut ok = false;
     let mut cancel = false;
     ui.add_space(6.0);

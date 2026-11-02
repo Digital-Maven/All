@@ -22,7 +22,9 @@ use serde_json::{Value as Json, json};
 
 use crate::SheetApp;
 use crate::clock::now_ms;
+use crate::icons::{self, Icon};
 use crate::theme::Tokens;
+use crate::widgets::{big_button, small_button, small_toggle_button};
 
 mod data_view;
 mod diagram;
@@ -224,110 +226,214 @@ fn empty_model(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn tab_button(ui: &mut Ui, t: &Tokens, label: &str, active: bool) -> bool {
-    let text = if active { RichText::new(label).strong().color(t.text) } else { RichText::new(label).color(t.text_dim) };
-    ui.add(egui::Button::new(text).frame(false)).clicked()
+    let text = if active { RichText::new(label).strong().color(t.accent) } else { RichText::new(label).color(t.text_dim) };
+    let r = ui.add(egui::Button::new(text).frame(false).min_size(vec2(56.0, 26.0)));
+    if active {
+        let rect = r.rect;
+        ui.painter().line_segment(
+            [egui::pos2(rect.left() + 6.0, rect.bottom() + 1.0), egui::pos2(rect.right() - 6.0, rect.bottom() + 1.0)],
+            egui::Stroke::new(2.5, t.accent),
+        );
+    }
+    r.clicked()
 }
 
-fn tool(ui: &mut Ui, label: &str, tip: &str) -> bool {
-    ui.add(egui::Button::new(label).min_size(vec2(0.0, 26.0))).on_hover_text(tip).clicked()
+/// A ribbon group: its buttons over a dim caption, followed by a divider.
+fn group(ui: &mut Ui, t: &Tokens, caption: &str, add: impl FnOnce(&mut Ui)) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let body = ui.horizontal(|ui| {
+            ui.set_min_height(72.0);
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.add_space(4.0);
+            add(ui);
+            ui.add_space(4.0);
+        });
+        // The caption sits centred under the group's buttons; the group is at least as wide.
+        let galley = ui.painter().layout_no_wrap(caption.to_string(), crate::theme::ui_font(10.5), t.text_dim);
+        let r = body.response.rect;
+        let w = r.width().max(galley.size().x + 8.0);
+        let (cap, _) = ui.allocate_exact_size(vec2(w, 16.0), egui::Sense::hover());
+        ui.painter().galley(egui::pos2(cap.left() + (w - galley.size().x) / 2.0, cap.top() + 2.0), galley, t.text_dim);
+    });
+    let (r, _) = ui.allocate_exact_size(vec2(13.0, 88.0), egui::Sense::hover());
+    ui.painter()
+        .line_segment([egui::pos2(r.center().x, r.top() + 6.0), egui::pos2(r.center().x, r.bottom() - 6.0)], egui::Stroke::new(1.0, t.separator));
+}
+
+/// Small buttons stacked in a column of a ribbon group.
+fn stack(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        add(ui);
+    });
 }
 
 fn toolbar(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, m: Option<&Rc<Model>>) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Power Pivot").strong().size(15.0).color(t.accent));
-        ui.add_space(16.0);
-        for (i, name) in ["Home", "Design"].iter().enumerate() {
+        icons::paint(ui.painter(), egui::Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(20.0, 20.0)), Icon::PivotTable, t.accent);
+        ui.add_space(26.0);
+        ui.label(RichText::new("Power Pivot").strong().size(15.0).color(t.text));
+        ui.add_space(20.0);
+        for (i, name) in ["Home", "Design", "View"].iter().enumerate() {
             if tab_button(ui, t, name, app.powerpivot.tab == i) {
                 app.powerpivot.tab = i;
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("Back to Workbook").on_hover_text("Close the Power Pivot window (Esc)").clicked() {
+            if small_button(ui, Icon::Back, "Back to Workbook", "Close the Power Pivot window (Esc)", false).clicked() {
                 app.powerpivot.open = false;
             }
         });
     });
-    ui.add_space(4.0);
+    ui.add_space(2.0);
+    ui.separator();
     let table = app.powerpivot.table.clone();
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        if app.powerpivot.tab == 0 {
-            if tool(ui, "Refresh", "Reload every table from its worksheet table and rewrite the data-model PivotTables")
-                && let Some(r) = run(app, "powerpivot.refresh", json!({}))
-            {
-                toast(app, format!("Refreshed {} report(s)", r["refreshed"]));
+    egui::ScrollArea::horizontal().id_salt("pp_ribbon").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            match app.powerpivot.tab {
+                0 => home_tab(app, ui, t, &table),
+                1 => design_tab(app, ui, t, m, &table),
+                _ => view_tab(app, ui, t),
             }
-            if tool(ui, "PivotTable", "Summarize the data model in a PivotTable") {
-                app.powerpivot.form = Some(Form::pivot());
-            }
-            ui.separator();
-            if tool(ui, "New Measure", "A DAX formula evaluated for each cell of a PivotTable") {
-                app.powerpivot.form = Some(Form::new_measure(&table));
-            }
-            if tool(ui, "Manage Measures", "List, edit and delete the model's measures") {
+        });
+    });
+}
+
+fn home_tab(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, table: &str) {
+    group(ui, t, "Get Data", |ui| {
+        if big_button(ui, Icon::Table, "Add All\nTables", "Add every workbook table that isn't in the model yet", false).clicked()
+            && let Some(r) = run(app, "powerpivot.addAllTables", json!({}))
+        {
+            let n = r["added"].as_array().map(Vec::len).unwrap_or(0);
+            toast(app, format!("Added {n} table(s) to the data model"));
+        }
+        if big_button(ui, Icon::Calc, "Refresh", "Reload every table from its source and rewrite the data-model PivotTables", false).clicked()
+            && let Some(r) = run(app, "powerpivot.refresh", json!({}))
+        {
+            toast(app, format!("Refreshed {} report(s)", r["refreshed"]));
+        }
+    });
+    group(ui, t, "Reports", |ui| {
+        if big_button(ui, Icon::PivotTable, "PivotTable", "Summarize the data model in a PivotTable", false).clicked() {
+            app.powerpivot.form = Some(Form::pivot());
+        }
+    });
+    group(ui, t, "Calculations", |ui| {
+        if big_button(ui, Icon::Sum, "New\nMeasure", "A DAX formula evaluated for each cell of a PivotTable", false).clicked() {
+            app.powerpivot.form = Some(Form::new_measure(table));
+        }
+        stack(ui, |ui| {
+            if small_button(ui, Icon::Function, "Manage Measures", "List, edit and delete the model's measures", false).clicked() {
                 app.powerpivot.form = Some(Form::ManageMeasures);
             }
-            if tool(ui, "Calculated Column", "A DAX formula evaluated for each row of the table") {
-                app.powerpivot.form = Some(Form::new_column(&table));
+            if small_button(ui, Icon::Fx, "Calculated Column", "A DAX formula evaluated for each row of the table", false).clicked() {
+                app.powerpivot.form = Some(Form::new_column(table));
             }
-            ui.separator();
-            if tool(ui, "Add All Tables", "Add every workbook table that isn't in the model yet")
-                && run(app, "powerpivot.addAllTables", json!({})).is_some()
-            {
-                toast(app, "Tables added to the data model");
-            }
-            ui.separator();
-            let view = app.powerpivot.view;
-            if ui.selectable_label(view == View::Data, "Data View").clicked() {
-                app.powerpivot.view = View::Data;
-            }
-            if ui.selectable_label(view == View::Diagram, "Diagram View").clicked() {
-                app.powerpivot.view = View::Diagram;
-            }
-            if ui.selectable_label(app.powerpivot.calc_area, "Calculation Area").on_hover_text("Show the measures under the grid").clicked() {
+            if small_toggle_button(ui, Icon::Calc, "Calculation Area", "Show the measures under the grid", app.powerpivot.calc_area).clicked() {
                 app.powerpivot.calc_area = !app.powerpivot.calc_area;
             }
-        } else {
-            if tool(ui, "Create Relationship", "Relate a column of one table to the key column of another") {
-                app.powerpivot.form = Some(Form::new_relationship(&table));
-            }
-            if tool(ui, "Manage Relationships", "List, edit, activate and delete relationships") {
-                app.powerpivot.form = Some(Form::ManageRelationships);
-            }
-            if tool(ui, "Detect Relationships", "Create relationships between same-named key columns")
-                && let Some(r) = run(app, "powerpivot.detectRelationships", json!({}))
-            {
-                let n = r["created"].as_array().map(Vec::len).unwrap_or(0);
-                toast(app, if n == 0 { "No new relationships found".to_string() } else { format!("Created {n} relationship(s)") });
-            }
-            ui.separator();
-            if tool(ui, "New Date Table", "Build a calendar table from a date column and relate it") {
-                app.powerpivot.form = Some(Form::date_table(m.map(|m| m.as_ref()), &table));
-            }
-            ui.separator();
-            let removable = !table.is_empty();
+        });
+    });
+    view_group(app, ui, t);
+}
+
+fn view_group(app: &mut SheetApp, ui: &mut Ui, t: &Tokens) {
+    group(ui, t, "View", |ui| {
+        let view = app.powerpivot.view;
+        if view_button(ui, t, Icon::Table, "Data\nView", "Rows and columns of one table", view == View::Data) {
+            app.powerpivot.view = View::Data;
+        }
+        if view_button(ui, t, Icon::PageLayout, "Diagram\nView", "The tables and their relationships", view == View::Diagram) {
+            app.powerpivot.view = View::Diagram;
+        }
+    });
+}
+
+/// A big button drawn pressed while `on` (the view switches).
+fn view_button(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, tip: &str, on: bool) -> bool {
+    let start = ui.cursor().min;
+    let r = big_button(ui, icon, label, tip, false);
+    if on {
+        let rect = egui::Rect::from_min_max(egui::pos2(r.rect.left(), start.y), r.rect.max);
+        ui.painter().rect_stroke(rect, 5.0, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+    }
+    r.clicked()
+}
+
+fn design_tab(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, m: Option<&Rc<Model>>, table: &str) {
+    group(ui, t, "Relationships", |ui| {
+        if big_button(ui, Icon::Link, "Create\nRelationship", "Relate a column of one table to the key column of another", false).clicked() {
+            app.powerpivot.form = Some(Form::new_relationship(table));
+        }
+        if big_button(ui, Icon::Settings, "Manage\nRelationships", "List, edit, activate and delete relationships", false).clicked() {
+            app.powerpivot.form = Some(Form::ManageRelationships);
+        }
+        if big_button(ui, Icon::Find, "Detect", "Create relationships between same-named key columns", false).clicked()
+            && let Some(r) = run(app, "powerpivot.detectRelationships", json!({}))
+        {
+            let n = r["created"].as_array().map(Vec::len).unwrap_or(0);
+            toast(app, if n == 0 { "No new relationships found".to_string() } else { format!("Created {n} relationship(s)") });
+        }
+    });
+    group(ui, t, "Calendars", |ui| {
+        if big_button(ui, Icon::Calendar, "Date\nTable", "Build a calendar table from a date column and relate it", false).clicked() {
+            app.powerpivot.form = Some(Form::date_table(m.map(|m| m.as_ref()), table));
+        }
+    });
+    group(ui, t, "Edit", |ui| {
+        let sel = app.powerpivot.selected.clone();
+        let deletable = match &sel {
+            Selected::Measure(_) => true,
+            Selected::Column(c) => m.and_then(|m| m.table(table)).and_then(|t| t.column(*c)).is_some_and(|c| c.expression.is_some()),
+            Selected::Nothing => false,
+        };
+        stack(ui, |ui| {
             if ui
-                .add_enabled(removable, egui::Button::new("Remove Table").min_size(vec2(0.0, 26.0)))
-                .on_hover_text("Remove the table from the data model (the worksheet keeps it)")
+                .add_enabled_ui(!table.is_empty(), |ui| {
+                    small_button(ui, Icon::Delete, "Remove Table", "Remove the table from the data model (the worksheet keeps it)", false)
+                })
+                .inner
                 .clicked()
                 && run(app, "powerpivot.removeTable", json!({ "table": table })).is_some()
             {
                 app.powerpivot.table.clear();
                 open(app);
             }
-            let sel = app.powerpivot.selected.clone();
-            let deletable = match &sel {
-                Selected::Measure(_) => true,
-                Selected::Column(c) => m.and_then(|m| m.table(&table)).and_then(|t| t.column(*c)).is_some_and(|c| c.expression.is_some()),
-                Selected::Nothing => false,
-            };
             if ui
-                .add_enabled(deletable, egui::Button::new("Delete Selected").min_size(vec2(0.0, 26.0)))
-                .on_hover_text("Delete the selected measure or calculated column")
+                .add_enabled_ui(deletable, |ui| {
+                    small_button(ui, Icon::Eraser, "Delete Selected", "Delete the selected measure or calculated column", false)
+                })
+                .inner
                 .clicked()
             {
                 delete_selected(app, m.map(|m| m.as_ref()));
             }
+        });
+    });
+}
+
+fn view_tab(app: &mut SheetApp, ui: &mut Ui, t: &Tokens) {
+    view_group(app, ui, t);
+    group(ui, t, "Show", |ui| {
+        stack(ui, |ui| {
+            if small_toggle_button(ui, Icon::Calc, "Calculation Area", "Show the measures under the grid", app.powerpivot.calc_area).clicked() {
+                app.powerpivot.calc_area = !app.powerpivot.calc_area;
+            }
+        });
+    });
+    group(ui, t, "Diagram", |ui| {
+        let d = &mut app.powerpivot.diagram;
+        if big_button(ui, Icon::Expand, "Fit to\nScreen", "Zoom and scroll the diagram so every table is in view", false).clicked() {
+            d.fit = true;
+            app.powerpivot.view = View::Diagram;
+        }
+        if big_button(ui, Icon::Normal, "Reset\nLayout", "Arrange the diagram's tables again", false).clicked() {
+            d.pos.clear();
+            d.zoom = 1.0;
+            d.scroll_to = Some(egui::Vec2::ZERO);
+            app.powerpivot.view = View::Diagram;
         }
     });
 }

@@ -3,12 +3,14 @@
 //! command and closes it, an error keeps it open with the message shown.
 
 use egui::{RichText, Ui, vec2};
-use gridcraft_engine::datamodel::pivot::{PivotGrid, PivotSpec, layout};
+use gridcraft_engine::datamodel::pivot::{PivotGrid, PivotSpec};
 use gridcraft_engine::datamodel::store::{DataType, Relationship};
 use gridcraft_engine::datamodel::{CrossFilter, Model, Value};
-use serde_json::{Value as Json, json};
+use serde_json::json;
 
 use super::{Selected, display_value, run, toast};
+
+mod pivot_fields;
 use crate::SheetApp;
 use crate::theme::Tokens;
 
@@ -355,7 +357,7 @@ pub(super) fn show(app: &mut SheetApp, ctx: &egui::Context) {
         Form::ManageRelationships => manage_relationships(app, ctx, &t, &m),
         Form::ManageMeasures => manage_measures(app, ctx, &t, &m),
         Form::DateTable(f) => date_table(app, ctx, &t, &m, f),
-        Form::Pivot(f) => pivot(app, ctx, &t, &m, f),
+        Form::Pivot(f) => pivot_fields::pivot(app, ctx, &t, &m, f),
     };
     // A form that opened another one (Manage → Edit) leaves that one in place.
     if keep && app.powerpivot.form.is_none() {
@@ -766,234 +768,6 @@ fn field_values(m: &Model, field: &str) -> Vec<String> {
     let mut vals: Vec<Value> = (0..col.cardinality() as u32).map(|id| col.dict_value(id).clone()).collect();
     vals.sort_by(gridcraft_engine::datamodel::value::sort_order);
     vals.iter().take(500).map(Value::to_text).collect()
-}
-
-fn chip_list(ui: &mut Ui, t: &Tokens, title: &str, items: &mut Vec<String>) {
-    ui.label(RichText::new(title).strong());
-    egui::Frame::NONE.fill(t.input_bg).stroke(egui::Stroke::new(1.0, t.input_border)).corner_radius(4.0).inner_margin(6.0).show(ui, |ui| {
-        ui.set_min_size(vec2(220.0, 70.0));
-        let mut remove = None;
-        let mut up = None;
-        for (i, it) in items.iter().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(it);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").clicked() {
-                        remove = Some(i);
-                    }
-                    if i > 0 && ui.small_button("↑").clicked() {
-                        up = Some(i);
-                    }
-                });
-            });
-        }
-        if items.is_empty() {
-            ui.label(RichText::new("—").color(t.text_dim));
-        }
-        if let Some(i) = remove {
-            items.remove(i);
-        }
-        if let Some(i) = up {
-            items.swap(i, i - 1);
-        }
-    });
-}
-
-fn pivot(app: &mut SheetApp, ctx: &egui::Context, t: &Tokens, m: &Model, f: &mut PivotForm) -> bool {
-    let mut keep = true;
-    fit(window("PivotTable from Data Model"), ctx, vec2(1080.0, 640.0)).show(ctx, |ui| {
-        let list_h = (ctx.content_rect().height() - 360.0).clamp(160.0, 480.0);
-        ui.horizontal_top(|ui| {
-            // Field list.
-            ui.vertical(|ui| {
-                ui.set_width(300.0);
-                ui.label(RichText::new("Fields").strong());
-                ui.add(egui::TextEdit::singleline(&mut f.search).hint_text("Search fields").desired_width(290.0));
-                let q = f.search.to_lowercase();
-                egui::ScrollArea::vertical().id_salt("pp_fields").max_height(list_h).show(ui, |ui| {
-                    for tb in &m.tables {
-                        let ti = m.table_index(&tb.name);
-                        egui::CollapsingHeader::new(RichText::new(tb.name.clone()).strong())
-                            .id_salt(("pp_ft", &tb.name))
-                            .default_open(m.tables.len() <= 4)
-                            .show(ui, |ui| {
-                                for ms in m.measures.iter().filter(|ms| Some(ms.table) == ti && (q.is_empty() || ms.name.to_lowercase().contains(&q)))
-                                {
-                                    let on = f.values.iter().any(|v| v.measure && v.source == ms.name);
-                                    let mut c = on;
-                                    if ui.checkbox(&mut c, format!("Σ {}", ms.name)).on_hover_text(&ms.expression).changed() {
-                                        if c {
-                                            f.values.push(ValueField { source: ms.name.clone(), measure: true, agg: 0 });
-                                        } else {
-                                            f.values.retain(|v| !(v.measure && v.source == ms.name));
-                                        }
-                                    }
-                                }
-                                for col in tb.columns.iter().filter(|c| q.is_empty() || c.name.to_lowercase().contains(&q)) {
-                                    let field = format!("{}[{}]", quote(&tb.name), col.name);
-                                    ui.horizontal(|ui| {
-                                        ui.add(egui::Label::new(&col.name).truncate()).on_hover_text(&field);
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            if ui.small_button("Σ").on_hover_text("Add to Values (Sum; change the summary below)").clicked() {
-                                                let agg = if col.data_type() == DataType::Number { 0 } else { 2 };
-                                                f.values.push(ValueField { source: field.clone(), measure: false, agg });
-                                            }
-                                            if ui.small_button("F").on_hover_text("Add to Filters").clicked()
-                                                && !f.filters.iter().any(|x| x.field == field)
-                                            {
-                                                f.filters.push(FilterField { field: field.clone(), keep: vec![] });
-                                            }
-                                            if ui.small_button("C").on_hover_text("Add to Columns").clicked() && !f.columns.contains(&field) {
-                                                f.columns.push(field.clone());
-                                            }
-                                            if ui.small_button("R").on_hover_text("Add to Rows").clicked() && !f.rows.contains(&field) {
-                                                f.rows.push(field.clone());
-                                            }
-                                        });
-                                    });
-                                }
-                            });
-                    }
-                });
-            });
-            ui.add_space(14.0);
-            // Areas.
-            ui.vertical(|ui| {
-                ui.set_width(250.0);
-                egui::ScrollArea::vertical().id_salt("pp_areas").max_height(list_h + 30.0).show(ui, |ui| {
-                    ui.label(RichText::new("Filters").strong());
-                    let mut remove = None;
-                    for (i, flt) in f.filters.iter_mut().enumerate() {
-                        let all = field_values(m, &flt.field);
-                        let summary = if flt.keep.is_empty() { "(All)".to_string() } else { format!("{} selected", flt.keep.len()) };
-                        ui.horizontal(|ui| {
-                            ui.label(&flt.field);
-                            let r = craft_ui::ComboBox::from_id_salt(("pp_flt", i)).width(110.0).selected_text(summary).show_ui(ui, |ui| {
-                                if ui.button("Select all").clicked() {
-                                    flt.keep.clear();
-                                }
-                                for v in &all {
-                                    let mut on = flt.keep.is_empty() || flt.keep.contains(v);
-                                    if ui.checkbox(&mut on, v).changed() {
-                                        if flt.keep.is_empty() {
-                                            flt.keep = all.clone();
-                                        }
-                                        if on {
-                                            flt.keep.push(v.clone());
-                                        } else {
-                                            flt.keep.retain(|x| x != v);
-                                        }
-                                        if flt.keep.len() == all.len() {
-                                            flt.keep.clear();
-                                        }
-                                    }
-                                }
-                            });
-                            name(&r.response, &format!("Filter values of {}", flt.field));
-                            if ui.small_button("×").clicked() {
-                                remove = Some(i);
-                            }
-                        });
-                    }
-                    if f.filters.is_empty() {
-                        ui.label(RichText::new("—").color(t.text_dim));
-                    }
-                    if let Some(i) = remove {
-                        f.filters.remove(i);
-                    }
-                    ui.add_space(6.0);
-                    chip_list(ui, t, "Columns", &mut f.columns);
-                    ui.add_space(6.0);
-                    chip_list(ui, t, "Rows", &mut f.rows);
-                    ui.add_space(6.0);
-                    ui.label(RichText::new("Values").strong());
-                    egui::Frame::NONE.fill(t.input_bg).stroke(egui::Stroke::new(1.0, t.input_border)).corner_radius(4.0).inner_margin(6.0).show(
-                        ui,
-                        |ui| {
-                            ui.set_min_size(vec2(220.0, 70.0));
-                            let mut remove = None;
-                            for (i, v) in f.values.iter_mut().enumerate() {
-                                ui.horizontal(|ui| {
-                                    if v.measure {
-                                        ui.label(format!("Σ {}", v.source));
-                                    } else {
-                                        let shown = AGGS.get(v.agg).map(|a| a.0).unwrap_or("Sum");
-                                        let r = craft_ui::ComboBox::from_id_salt(("pp_agg", i)).width(90.0).selected_text(shown).show_ui(ui, |ui| {
-                                            for (k, (label, _)) in AGGS.iter().enumerate() {
-                                                ui.selectable_value(&mut v.agg, k, *label);
-                                            }
-                                        });
-                                        name(&r.response, &format!("Summarize {} by", v.source));
-                                        ui.add(egui::Label::new(&v.source).truncate());
-                                    }
-                                    if ui.small_button("×").clicked() {
-                                        remove = Some(i);
-                                    }
-                                });
-                            }
-                            if f.values.is_empty() {
-                                ui.label(RichText::new("Tick a measure, or press Σ next to a column").color(t.text_dim));
-                            }
-                            if let Some(i) = remove {
-                                f.values.remove(i);
-                            }
-                        },
-                    );
-                });
-            });
-            ui.add_space(14.0);
-            // Live preview.
-            ui.vertical(|ui| {
-                ui.label(RichText::new("Preview").strong());
-                let spec = f.spec();
-                let key = format!("{:?}|{:?}|{:?}|{:?}", spec.rows, spec.columns, spec.values, spec.filters);
-                if f.preview.as_ref().is_none_or(|(k, _)| *k != key) {
-                    let r = if spec.values.is_empty() {
-                        Err("Add a value to see the PivotTable.".to_string())
-                    } else {
-                        layout(m, &spec).map_err(|e| e.to_string())
-                    };
-                    f.preview = Some((key, r));
-                }
-                match f.preview.as_ref().map(|(_, r)| r) {
-                    Some(Ok(g)) => preview_grid(ui, t, g, list_h),
-                    Some(Err(e)) => {
-                        ui.label(RichText::new(e).color(t.text_dim));
-                    }
-                    None => {}
-                }
-            });
-        });
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut f.new_sheet, true, "New worksheet");
-            ui.radio_value(&mut f.new_sheet, false, "Existing worksheet at");
-            ui.add_enabled(!f.new_sheet, egui::TextEdit::singleline(&mut f.at).hint_text("Sheet1!H2").desired_width(140.0));
-        });
-        error_line(ui, t, &f.error);
-        let (ok, cancel) = ok_cancel(ui, "Insert PivotTable");
-        if cancel {
-            keep = false;
-        }
-        if ok {
-            let spec = f.spec();
-            let mut params = json!({ "rows": spec.rows, "columns": spec.columns, "values": spec.values, "filters": spec.filters });
-            if !f.new_sheet && !f.at.trim().is_empty() {
-                params["at"] = Json::String(f.at.trim().to_string());
-            }
-            match app.run("powerpivot.insertPivot", params) {
-                Ok(r) => {
-                    if let Some(sheet) = r["sheet"].as_str() {
-                        let _ = app.run("sheet.activate", json!({ "sheet": sheet }));
-                    }
-                    app.powerpivot.open = false;
-                    keep = false;
-                }
-                Err(e) => f.error = Some(e),
-            }
-        }
-    });
-    keep
 }
 
 fn preview_grid(ui: &mut Ui, t: &Tokens, g: &PivotGrid, h: f32) {

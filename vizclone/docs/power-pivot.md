@@ -27,29 +27,40 @@ Diagram View, PivotTable and Date Table.
 
 **Power Pivot window** (Manage; replaces the grid until Back to Workbook or Esc):
 
-- *Home* toolbar: Refresh, PivotTable, New Measure, Manage Measures, Calculated Column, Add All
-  Tables, Data View / Diagram View, Calculation Area.
-- *Design* toolbar: Create Relationship, Manage Relationships, Detect Relationships, New Date
-  Table, Remove Table, Delete Selected.
+- An icon ribbon with captioned groups. *Home*: Get Data (Add All Tables, Refresh), Reports
+  (PivotTable), Calculations (New Measure, Manage Measures, Calculated Column, Calculation Area),
+  View (Data View / Diagram View). *Design*: Relationships (Create, Manage, Detect), Calendars
+  (Date Table), Edit (Remove Table, Delete Selected). *View*: the views, Calculation Area, and
+  the diagram's Fit to Screen / Reset Layout.
 - **Data View**: one tab per model table; the rows in a grid with a sticky header showing each
   column's type and distinct count (calculated columns tinted); right-click a header to sort;
   `+` adds a calculated column. The **formula bar** shows the selected measure (`Name := formula`)
   or calculated column (`= formula`) and edits it in place; with nothing selected, typing
   `Name := formula` and Enter adds a measure. The **calculation area** lists the table's measures
   with their values (double-click to edit, right-click to delete).
-- **Diagram View**: tables as boxes in a star layout (data tables in the middle, lookup tables
-  around them); relationships drawn between the key columns with `*`/`1` ends and arrows for the
-  filter direction (dashed when inactive). Drag a column onto a column of another table to relate
+- **Diagram View**: tables as cards (table icon and name, a row per column with its icon, `fx`
+  for calculated columns) in a star layout (data tables in the middle, lookup tables around
+  them). Cards with many columns scroll on their own (wheel or the card's scroll bar).
+  Relationships are right-angled lines between the key columns with `*`/`1` ends and a small
+  square marker whose arrow shows the filter direction (two arrows for both directions, dashed
+  when inactive). The canvas has horizontal and vertical **scroll bars** (also the wheel or a
+  background drag), **zoom** (−/+, 100%, Ctrl/Cmd + wheel, 30–200%) and **Fit to Screen**, so
+  you can always get back to every table. Drag a column onto a column of another table to relate
   them; click a line to select it (Make Active/Inactive, Filter direction, Delete); drag titles to
-  move boxes; double-click a title to open the table.
+  move cards; double-click a title to open the table.
 
 **Forms**: New/Edit Measure (table, name, formula with Insert function / Insert field helpers,
 Check Formula, number format), Add/Edit Calculated Column (with a preview of the first values),
 Create/Edit Relationship, Manage Relationships, Manage Measures, New Date Table, and
-**PivotTable from Data Model**: a field list of every table's columns and measures (R/C/F/Σ to
-add to Rows, Columns, Filters, Values; Σ on a column makes an implicit Sum/Average/Count/Distinct
-Count/Min/Max), filters with value checklists, and a **live preview** of the result before it is
-inserted on a new or existing sheet. Inserted reports get bold headers and totals, the measures'
+**PivotTable from Data Model**, laid out like a PivotTable Fields pane: the **live report** on
+the left; on the right a searchable field list (a checkbox per measure and column, grouped by
+table) over the four areas **Filters, Columns, Rows, Values**. Ticking a field puts numbers and
+measures in Values (an implicit Sum) and other columns in Rows; unticking removes it. Fields drag
+from the list into any area, and the chips drag between areas and reorder within one (a line
+shows where the drop lands). Right-click a field for *Add to …*; click a chip for Move Up / Down /
+to Beginning / to End, Move to another area, Remove Field, *Summarize Values By* (Sum, Average,
+Count, Distinct Count, Min, Max) and, in Filters, *Filter Values*. Measures stay in Values. The
+report is inserted on a new or existing sheet. Inserted reports get bold headers and totals, the measures'
 number formats and fitted column widths.
 
 ## Commands

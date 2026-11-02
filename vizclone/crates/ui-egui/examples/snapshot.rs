@@ -148,8 +148,12 @@ fn main() {
                         _ => {
                             powerpivot::open(&mut app);
                             app.powerpivot.calc_area = true;
-                            if mode == "diagram" {
+                            if let Some(z) = mode.strip_prefix("diagram") {
                                 app.powerpivot.view = View::Diagram;
+                                // `diagram:1.8` renders zoomed in.
+                                if let Some(z) = z.strip_prefix(':').and_then(|z| z.parse::<f32>().ok()) {
+                                    app.powerpivot.diagram.zoom = z;
+                                }
                             }
                             if mode == "measure" {
                                 let table = app.powerpivot.table.clone();

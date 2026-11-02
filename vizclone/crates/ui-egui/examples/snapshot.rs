@@ -210,7 +210,7 @@ fn main() {
         );
     // The workbook's installed fonts bind once the font scan is done; frames past the first few
     // apply them, so the snapshot shows them as the app does.
-    harness.run_steps(14);
+    harness.run_steps(std::env::var("GC_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(14));
     let img = harness.render().expect("render");
     img.save(&out).expect("save png");
     eprintln!("wrote {out} ({}x{})", img.width(), img.height());

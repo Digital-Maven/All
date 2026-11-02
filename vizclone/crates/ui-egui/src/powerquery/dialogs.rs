@@ -801,7 +801,7 @@ fn body(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, k: &mut Kind, cols: &[Strin
             for (i, g) in groups.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
                     combo(ui, &format!("pq_gb_g{i}"), "Group by column", g, cols, 220.0);
-                    if i > 0 && ui.small_button("✕").clicked() {
+                    if i > 0 && ui.small_button("×").clicked() {
                         remove_g = Some(i);
                     }
                 });
@@ -821,7 +821,7 @@ fn body(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, k: &mut Kind, cols: &[Strin
                     if *op >= 2 && *op <= 6 {
                         combo(ui, &format!("pq_gb_c{i}"), "Column", col, cols, 160.0);
                     }
-                    if i > 0 && ui.small_button("✕").clicked() {
+                    if i > 0 && ui.small_button("×").clicked() {
                         remove_a = Some(i);
                     }
                 });
@@ -1029,7 +1029,7 @@ fn body(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, k: &mut Kind, cols: &[Strin
                     super::labeled(&ui.add(egui::TextEdit::singleline(value).desired_width(90.0).hint_text("Value")), "value");
                     ui.label("Then");
                     super::labeled(&ui.add(egui::TextEdit::singleline(out).desired_width(90.0).hint_text("Output")), "out");
-                    if i > 0 && ui.small_button("✕").clicked() {
+                    if i > 0 && ui.small_button("×").clicked() {
                         remove = Some(i);
                     }
                 });

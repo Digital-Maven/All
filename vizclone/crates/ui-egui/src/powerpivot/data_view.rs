@@ -127,7 +127,7 @@ fn formula_bar(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, m: &Model, table: &T
         );
         let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let ok = ui.add_enabled(editable, egui::Button::new("✓")).on_hover_text("Apply").clicked();
-        let cancel = ui.add_enabled(editable, egui::Button::new("✕")).on_hover_text("Cancel").clicked();
+        let cancel = ui.add_enabled(editable, egui::Button::new("×")).on_hover_text("Cancel").clicked();
         if cancel {
             app.powerpivot.formula_for = None;
         }

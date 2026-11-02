@@ -58,7 +58,10 @@ pub fn queries(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, doc: &QueryDoc) {
         }
     }
     groups.sort_by_key(|g| g.is_some());
-    egui::ScrollArea::vertical().id_salt("pq_queries_scroll").show(ui, |ui| {
+    // Rows are as wide as the panel minus a margin, never wider: a row that asked for more would
+    // widen the resizable panel, which would widen the rows again, every frame.
+    let row_w = (ui.available_width() - 6.0).max(60.0);
+    egui::ScrollArea::vertical().id_salt("pq_queries_scroll").auto_shrink([false, false]).show(ui, |ui| {
         for g in &groups {
             if let Some(name) = g {
                 ui.add_space(4.0);
@@ -67,7 +70,7 @@ pub fn queries(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, doc: &QueryDoc) {
             for q in doc.queries.iter().filter(|q| &q.group == g) {
                 let active = q.name == app.powerquery.query;
                 let label = RichText::new(&q.name).color(if active { t.on_accent } else { t.text });
-                let r = ui.add(egui::Button::new(label).fill(if active { t.accent } else { t.ribbon }).min_size(vec2(ui.available_width(), 24.0)));
+                let r = ui.add(egui::Button::new(label).fill(if active { t.accent } else { t.ribbon }).min_size(vec2(row_w, 24.0)));
                 let r = r.on_hover_text(format!(
                     "Loads to: {}{}",
                     load_label(q.load, q.loaded_table.is_some()),
@@ -163,13 +166,13 @@ pub fn settings(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, steps: &[Step]) {
     ui.label(RichText::new("APPLIED STEPS").small().color(t.text_dim));
     let selected = app.powerquery.step.clone().or_else(|| steps.last().map(|s| s.name.clone()));
     let last = steps.len().saturating_sub(1);
-    egui::ScrollArea::vertical().id_salt("pq_steps").show(ui, |ui| {
+    let row_w = (ui.available_width() - 44.0).max(60.0);
+    egui::ScrollArea::vertical().id_salt("pq_steps").auto_shrink([false, false]).show(ui, |ui| {
         for (i, s) in steps.iter().enumerate() {
             let active = selected.as_deref() == Some(s.name.as_str());
             ui.horizontal(|ui| {
                 let label = RichText::new(&s.name).color(if active { t.on_accent } else { t.text });
-                let w = ui.available_width() - 28.0;
-                let r = ui.add(egui::Button::new(label).fill(if active { t.accent } else { t.ribbon }).min_size(vec2(w.max(60.0), 24.0)));
+                let r = ui.add(egui::Button::new(label).fill(if active { t.accent } else { t.ribbon }).min_size(vec2(row_w, 24.0)).truncate());
                 let r = r.on_hover_text(&s.expr);
                 if r.clicked() {
                     app.powerquery.step = if i == last { None } else { Some(s.name.clone()) };
@@ -180,7 +183,7 @@ pub fn settings(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, steps: &[Step]) {
                 }
                 let name = s.name.clone();
                 r.context_menu(|ui| step_menu(app, ui, &name, i, last));
-                if ui.small_button("✕").on_hover_text("Delete this step").clicked() {
+                if ui.small_button("×").on_hover_text("Delete this step").clicked() {
                     let q = app.powerquery.query.clone();
                     run(app, "powerquery.deleteStep", json!({ "query": q, "step": name }));
                     app.powerquery.step = None;
@@ -235,7 +238,7 @@ pub fn formula_bar(app: &mut SheetApp, ui: &mut Ui, t: &Tokens, steps: &[Step]) 
     }
     egui::Frame::NONE.fill(t.window).inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            let cancel = ui.add(egui::Button::new("✕")).on_hover_text("Cancel").clicked();
+            let cancel = ui.add(egui::Button::new("×")).on_hover_text("Cancel").clicked();
             let ok = ui.add(egui::Button::new("✓")).on_hover_text("Apply (Enter)").clicked();
             if ui.add(egui::Button::new(RichText::new("fx").italics())).on_hover_text("Add a step after this one").clicked() {
                 super::add_step(app, "Custom", "{prev}");

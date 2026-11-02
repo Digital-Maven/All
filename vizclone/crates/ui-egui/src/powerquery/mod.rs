@@ -271,12 +271,24 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             panes::status_bar(app, ui, &t);
         },
     );
-    egui::Panel::left("pq_queries").resizable(true).default_size(230.0).frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(8)).show(ui, |ui| {
-        panes::queries(app, ui, &t, &doc);
-    });
-    egui::Panel::right("pq_settings").resizable(true).default_size(250.0).frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(8)).show(ui, |ui| {
-        panes::settings(app, ui, &t, &steps);
-    });
+    egui::Panel::left("pq_queries")
+        .resizable(true)
+        .default_size(230.0)
+        .min_size(150.0)
+        .max_size(420.0)
+        .frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(8))
+        .show(ui, |ui| {
+            panes::queries(app, ui, &t, &doc);
+        });
+    egui::Panel::right("pq_settings")
+        .resizable(true)
+        .default_size(250.0)
+        .min_size(170.0)
+        .max_size(420.0)
+        .frame(egui::Frame::NONE.fill(t.ribbon).inner_margin(8))
+        .show(ui, |ui| {
+            panes::settings(app, ui, &t, &steps);
+        });
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.grid_bg)).show(ui, |ui| {
         if doc.queries.is_empty() {
             panes::empty(app, ui);

@@ -778,7 +778,7 @@ fn chip_list(ui: &mut Ui, t: &Tokens, title: &str, items: &mut Vec<String>) {
             ui.horizontal(|ui| {
                 ui.label(it);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("✕").clicked() {
+                    if ui.small_button("×").clicked() {
                         remove = Some(i);
                     }
                     if i > 0 && ui.small_button("↑").clicked() {
@@ -890,7 +890,7 @@ fn pivot(app: &mut SheetApp, ctx: &egui::Context, t: &Tokens, m: &Model, f: &mut
                                 }
                             });
                             name(&r.response, &format!("Filter values of {}", flt.field));
-                            if ui.small_button("✕").clicked() {
+                            if ui.small_button("×").clicked() {
                                 remove = Some(i);
                             }
                         });
@@ -926,7 +926,7 @@ fn pivot(app: &mut SheetApp, ctx: &egui::Context, t: &Tokens, m: &Model, f: &mut
                                         name(&r.response, &format!("Summarize {} by", v.source));
                                         ui.add(egui::Label::new(&v.source).truncate());
                                     }
-                                    if ui.small_button("✕").clicked() {
+                                    if ui.small_button("×").clicked() {
                                         remove = Some(i);
                                     }
                                 });

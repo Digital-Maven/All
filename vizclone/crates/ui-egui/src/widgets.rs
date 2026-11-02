@@ -749,3 +749,66 @@ mod tooltip_shortcut_tests {
         }
     }
 }
+
+/// An icon-only ribbon button (the Power Query Editor's ribbon): a 22px icon in a 36px square,
+/// with a dropdown arrow when it opens a menu. The name and description show on hover; the name
+/// is also the accessible name. Drawn pressed while `on` (toggles).
+pub fn icon_tool(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: bool, on: bool) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let w = if dropdown { 46.0 } else { 36.0 };
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 36.0), Sense::click());
+    if on || resp.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, 5.0, t.pressed);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, 5.0, t.hover);
+    }
+    if on {
+        ui.painter().rect_stroke(rect, 5.0, Stroke::new(1.0, t.accent), StrokeKind::Inside);
+    }
+    let color = if ui.is_enabled() { t.text } else { t.text_disabled };
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(rect.left() + 18.0, rect.center().y), vec2(22.0, 22.0)), icon, color);
+    if dropdown {
+        icons::paint(
+            ui.painter(),
+            Rect::from_center_size(pos2(rect.right() - 6.0, rect.center().y + 1.0), vec2(9.0, 9.0)),
+            Icon::Chevron,
+            t.text_dim,
+        );
+    }
+    let name = tr(ui, label).to_string();
+    let enabled = ui.is_enabled();
+    if on {
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, enabled, true, &name));
+    } else {
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, &name));
+    }
+    let tip = tr(ui, tip).to_string();
+    resp.on_hover_ui(|ui| {
+        ui.label(egui::RichText::new(&name).strong());
+        if !tip.is_empty() {
+            ui.label(egui::RichText::new(&tip).color(t.text_dim));
+        }
+    })
+}
+
+/// A ribbon group: its controls in a row over a dim caption, then a divider.
+pub fn ribbon_group(ui: &mut Ui, caption: &str, add: impl FnOnce(&mut Ui)) {
+    let t = Tokens::get(ui.ctx());
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let body = ui.horizontal(|ui| {
+            ui.set_min_height(40.0);
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.add_space(4.0);
+            add(ui);
+            ui.add_space(4.0);
+        });
+        let caption = tr(ui, caption).to_string();
+        let galley = ui.painter().layout_no_wrap(caption, theme::ui_font(10.5), t.text_dim);
+        let w = body.response.rect.width().max(galley.size().x + 8.0);
+        let (cap, _) = ui.allocate_exact_size(vec2(w, 15.0), Sense::hover());
+        ui.painter().galley(pos2(cap.left() + (w - galley.size().x) / 2.0, cap.top() + 1.0), galley, t.text_dim);
+    });
+    let (r, _) = ui.allocate_exact_size(vec2(11.0, 55.0), Sense::hover());
+    ui.painter().line_segment([pos2(r.center().x, r.top() + 4.0), pos2(r.center().x, r.bottom() - 4.0)], Stroke::new(1.0, t.separator));
+}

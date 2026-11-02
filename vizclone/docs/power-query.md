@@ -32,6 +32,12 @@ Connections).
 - **Query Settings** (right): name, properties and the **Applied Steps** (click to preview a step,
   ✕ to delete, double-click to rename, right-click for Delete Until End, Insert Step After, Move
   Before/After).
+- **Ribbon**: icon buttons in captioned groups (Home: New Query, Query, Reduce Rows & Columns,
+  Transform, Combine, Parameters & Load; Transform: Table, Any Column, Text Column, Number
+  Column, Date & Time, Structured; Add Column: General, From Text, From Number, From Date & Time;
+  View: Layout, Data Preview, Dependencies & Columns). Hovering a button shows its name and what
+  it does; buttons with an arrow open a menu; View's toggles are drawn pressed while on. The row
+  scrolls sideways in a narrow window.
 - **Home**: New Source, Enter Data, Refresh Preview, Refresh All, Advanced Editor, Manage
   (Duplicate/Reference/Delete), Choose Columns, Remove Columns / Other Columns, Keep Rows (top,
   bottom, range, duplicates, errors), Remove Rows (top, bottom, alternate, duplicates, blank,

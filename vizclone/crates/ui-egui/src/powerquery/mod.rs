@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use egui::{RichText, Ui, vec2};
+use egui::{RichText, Ui};
 use gridcraft_engine::query::profile::ColumnProfile;
 use gridcraft_engine::query::steps::{QueryDef, QueryDoc, Step, steps_of};
 use gridcraft_engine::query::{Table, Value};
@@ -211,8 +211,16 @@ pub fn open(app: &mut SheetApp, query: Option<&str>) {
 }
 
 fn tab_button(ui: &mut Ui, t: &Tokens, label: &str, active: bool) -> bool {
-    let text = if active { RichText::new(label).strong().color(t.text) } else { RichText::new(label).color(t.text_dim) };
-    ui.add(egui::Button::new(text).frame(false)).clicked()
+    let text = if active { RichText::new(label).strong().color(t.accent) } else { RichText::new(label).color(t.text_dim) };
+    let r = ui.add(egui::Button::new(text).frame(false).min_size(egui::vec2(56.0, 26.0)));
+    if active {
+        let rect = r.rect;
+        ui.painter().line_segment(
+            [egui::pos2(rect.left() + 6.0, rect.bottom() + 1.0), egui::pos2(rect.right() - 6.0, rect.bottom() + 1.0)],
+            egui::Stroke::new(2.5, t.accent),
+        );
+    }
+    r.clicked()
 }
 
 /// Shows the editor in place of the ribbon, grid and sheet tabs.
@@ -237,21 +245,36 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
         ui,
         |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Power Query Editor").strong().size(15.0).color(t.accent));
-                ui.add_space(16.0);
+                let (r, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+                crate::icons::paint(ui.painter(), r, crate::icons::Icon::Pq(crate::icons::Pq::NewSource), t.accent);
+                ui.label(RichText::new("Power Query Editor").strong().size(15.0).color(t.text));
+                ui.add_space(20.0);
                 for (i, name) in ["Home", "Transform", "Add Column", "View"].iter().enumerate() {
                     if tab_button(ui, &t, name, app.powerquery.tab == i) {
                         app.powerquery.tab = i;
                     }
+                    ui.add_space(4.0);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Close").on_hover_text("Back to the workbook (Esc). Changes are already saved in the queries.").clicked() {
+                    if crate::widgets::small_button(
+                        ui,
+                        crate::icons::Icon::Back,
+                        "Close",
+                        "Back to the workbook (Esc). Changes are already saved in the queries.",
+                        false,
+                    )
+                    .clicked()
+                    {
                         app.powerquery.open = false;
                     }
-                    if ui
-                        .add(egui::Button::new(RichText::new("Close & Load").strong()))
-                        .on_hover_text("Load the query where it goes (a table, the data model, or connection only) and close")
-                        .clicked()
+                    if crate::widgets::small_button(
+                        ui,
+                        crate::icons::Icon::Pq(crate::icons::Pq::CloseLoad),
+                        "Close & Load",
+                        "Load the query where it goes (a table, the data model, or connection only) and close",
+                        false,
+                    )
+                    .clicked()
                     {
                         let q = app.powerquery.query.clone();
                         if !q.is_empty() && run(app, "powerquery.load", json!({ "query": q })).is_some() {
@@ -261,7 +284,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                     }
                 });
             });
-            ui.add_space(4.0);
+            ui.add_space(2.0);
+            ui.separator();
             ops::ribbon(app, ui);
         },
     );
@@ -307,12 +331,4 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
 /// Draws the editor's dialogs (also when the editor is closed: Get Data opens from the ribbon).
 pub fn dialogs(app: &mut SheetApp, ctx: &egui::Context) {
     dialogs::show(app, ctx);
-}
-
-/// The width a button group takes; used by the ribbon rows.
-pub(crate) fn gap(ui: &mut Ui) {
-    ui.add_space(4.0);
-    ui.separator();
-    ui.add_space(4.0);
-    let _ = vec2(0.0, 0.0);
 }

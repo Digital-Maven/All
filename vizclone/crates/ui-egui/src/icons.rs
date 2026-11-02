@@ -8,6 +8,9 @@ use egui::{Color32, Painter, Pos2, Rect, Stroke, pos2, vec2};
 
 use crate::theme::{Cat, Tokens};
 
+mod pq;
+pub use pq::Pq;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Icon {
     Paste,
@@ -154,6 +157,8 @@ pub enum Icon {
     RunTo,
     /// Stop: a square.
     StopSquare,
+    /// The Power Query Editor's ribbon icons.
+    Pq(Pq),
 }
 
 struct G<'a> {
@@ -795,6 +800,7 @@ fn paint_with(p: &Painter, rect: Rect, icon: Icon, c: Color32, pal: &Palette) {
             g.line(&[(13.0, 3.0), (13.0, 9.0)], c, 1.1);
         }
         Icon::StopSquare => g.rect(3.0, 3.0, 10.0, 10.0, Some(pal.recording), None),
+        Icon::Pq(q) => pq::paint(&g, q, c, light, pal),
     }
 }
 

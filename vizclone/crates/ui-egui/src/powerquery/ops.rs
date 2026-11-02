@@ -11,8 +11,10 @@ use gridcraft_engine::query::value::quote_text;
 use serde_json::json;
 
 use super::dialogs::{Dialog, KeepRemove, SplitMode};
-use super::{add_step, gap, open, run, toast};
+use super::{add_step, open, run, toast};
 use crate::SheetApp;
+use crate::icons::Icon;
+use crate::widgets::{icon_tool, ribbon_group};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -191,7 +193,7 @@ fn step_name(o: &ColOp) -> String {
 
 /// A submenu of catalog operations of one menu (`Format`, `Extract`, `Date`, …).
 pub fn op_menu(app: &mut SheetApp, ui: &mut Ui, menu: &str, add: bool) {
-    ui.menu_button(menu, |ui| {
+    ribbon_menu(ui, menu, |ui| {
         for (i, o) in OPS.iter().enumerate().filter(|(_, o)| o.menu == menu) {
             if ui.button(o.label).clicked() {
                 apply_op(app, i, add, None);
@@ -207,7 +209,7 @@ pub fn change_type(app: &mut SheetApp, cols: &[String], ty: MType) {
 }
 
 pub fn type_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Data Type", |ui| {
+    ribbon_menu(ui, "Data Type", |ui| {
         for ty in MType::COLUMN_TYPES {
             if ui.button(ty.name()).clicked() {
                 if let Some(c) = need_columns(app) {
@@ -264,7 +266,7 @@ pub fn move_columns(app: &mut SheetApp, to: &str) {
 }
 
 fn statistics(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Statistics", |ui| {
+    ribbon_menu(ui, "Statistics", |ui| {
         for (label, f) in [
             ("Sum", "List.Sum"),
             ("Minimum", "List.Min"),
@@ -291,7 +293,7 @@ fn statistics(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn split_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Split Column", |ui| {
+    ribbon_menu(ui, "Split Column", |ui| {
         for (label, mode) in [
             ("By Delimiter…", SplitMode::Delimiter),
             ("By Number of Characters…", SplitMode::Chars),
@@ -312,8 +314,10 @@ fn split_menu(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn rows_menus(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Keep Rows", |ui| {
-        for (label, k) in [("Keep Top Rows…", KeepRemove::KeepTop), ("Keep Bottom Rows…", KeepRemove::KeepBottom), ("Keep Range of Rows…", KeepRemove::KeepRange)] {
+    ribbon_menu(ui, "Keep Rows", |ui| {
+        for (label, k) in
+            [("Keep Top Rows…", KeepRemove::KeepTop), ("Keep Bottom Rows…", KeepRemove::KeepBottom), ("Keep Range of Rows…", KeepRemove::KeepRange)]
+        {
             if ui.button(label).clicked() {
                 app.powerquery.dialog = Some(Dialog::rows(k));
                 ui.close();
@@ -321,17 +325,32 @@ fn rows_menus(app: &mut SheetApp, ui: &mut Ui) {
         }
         if ui.button("Keep Duplicates").clicked() {
             if let Some(c) = need_columns(app) {
-                add_step(app, "Kept Duplicates", &format!("let columnNames = {}, addCount = Table.Group({{prev}}, columnNames, {{{{\"Count\", Table.RowCount, type number}}}}), selectDuplicates = Table.SelectRows(addCount, each [Count] > 1), removeCount = Table.RemoveColumns(selectDuplicates, \"Count\") in Table.Join({{prev}}, columnNames, removeCount, columnNames, JoinKind.Inner)", text_list(&c)));
+                add_step(
+                    app,
+                    "Kept Duplicates",
+                    &format!(
+                        "let columnNames = {}, addCount = Table.Group({{prev}}, columnNames, {{{{\"Count\", Table.RowCount, type number}}}}), selectDuplicates = Table.SelectRows(addCount, each [Count] > 1), removeCount = Table.RemoveColumns(selectDuplicates, \"Count\") in Table.Join({{prev}}, columnNames, removeCount, columnNames, JoinKind.Inner)",
+                        text_list(&c)
+                    ),
+                );
             }
             ui.close();
         }
         if ui.button("Keep Errors").clicked() {
             let cols = app.powerquery.selected.clone();
-            add_step(app, "Kept Errors", &if cols.is_empty() { "Table.SelectRowsWithErrors({prev})".to_string() } else { format!("Table.SelectRowsWithErrors({{prev}}, {})", text_list(&cols)) });
+            add_step(
+                app,
+                "Kept Errors",
+                &if cols.is_empty() {
+                    "Table.SelectRowsWithErrors({prev})".to_string()
+                } else {
+                    format!("Table.SelectRowsWithErrors({{prev}}, {})", text_list(&cols))
+                },
+            );
             ui.close();
         }
     });
-    ui.menu_button("Remove Rows", |ui| {
+    ribbon_menu(ui, "Remove Rows", |ui| {
         for (label, k) in [
             ("Remove Top Rows…", KeepRemove::RemoveTop),
             ("Remove Bottom Rows…", KeepRemove::RemoveBottom),
@@ -376,7 +395,7 @@ fn rows_menus(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn headers_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Use First Row as Headers", |ui| {
+    ribbon_menu(ui, "Use First Row as Headers", |ui| {
         if ui.button("Use First Row as Headers").clicked() {
             add_step(app, "Promoted Headers", "Table.PromoteHeaders({prev}, [PromoteAllScalars=true])");
             ui.close();
@@ -389,7 +408,7 @@ fn headers_menu(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn unpivot_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Unpivot Columns", |ui| {
+    ribbon_menu(ui, "Unpivot Columns", |ui| {
         if ui.button("Unpivot Columns").clicked() || ui.button("Unpivot Only Selected Columns").clicked() {
             if let Some(c) = need_columns(app) {
                 add_step(app, "Unpivoted Columns", &format!("Table.Unpivot({{prev}}, {}, \"Attribute\", \"Value\")", text_list(&c)));
@@ -410,7 +429,7 @@ fn unpivot_menu(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn move_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Move", |ui| {
+    ribbon_menu(ui, "Move", |ui| {
         for (label, to) in [("Left", "left"), ("Right", "right"), ("To Beginning", "start"), ("To End", "end")] {
             if ui.button(label).clicked() {
                 move_columns(app, to);
@@ -421,7 +440,7 @@ fn move_menu(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn fill_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Fill", |ui| {
+    ribbon_menu(ui, "Fill", |ui| {
         for (label, f) in [("Down", "FillDown"), ("Up", "FillUp")] {
             if ui.button(label).clicked() {
                 if let Some(c) = need_columns(app) {
@@ -434,7 +453,7 @@ fn fill_menu(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn index_menu(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Index Column", |ui| {
+    ribbon_menu(ui, "Index Column", |ui| {
         if ui.button("From 0").clicked() {
             add_step(app, "Added Index", "Table.AddIndexColumn({prev}, \"Index\", 0, 1, Int64.Type)");
             ui.close();
@@ -499,114 +518,231 @@ pub fn combine_files(app: &mut SheetApp) {
 }
 
 fn big(ui: &mut Ui, label: &str, tip: &str) -> bool {
-    ui.add(egui::Button::new(label).min_size(egui::vec2(0.0, 26.0))).on_hover_text(tip).clicked()
+    icon_tool(ui, icon_for(label), label, tip, false, false).clicked()
+}
+
+/// A ribbon dropdown: an icon button whose menu holds `add`. Inside a menu (the column header's
+/// right-click menu reuses these) it is an ordinary submenu instead.
+fn ribbon_menu(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
+    if egui::containers::menu::is_in_menu(ui) {
+        ui.menu_button(label, add);
+        return;
+    }
+    let r = icon_tool(ui, icon_for(label), label, menu_tip(label), true, false);
+    egui::Popup::menu(&r).show(add);
+}
+
+/// Hover descriptions of the ribbon's dropdowns.
+fn menu_tip(label: &str) -> &'static str {
+    match label {
+        "New Source" => "Get data from a table, CSV, workbook, JSON, folder, web page or a blank query",
+        "Manage" => "Duplicate, reference or delete this query",
+        "Remove Columns" => "Remove the selected columns, or every other column",
+        "Keep Rows" => "Keep the top, bottom or a range of rows",
+        "Remove Rows" => "Remove top, bottom, alternate, duplicate, blank or error rows",
+        "Split Column" => "Split the selected column by a delimiter, a number of characters or positions",
+        "Data Type" => "Set the type of the selected columns",
+        "Use First Row as Headers" => "Promote the first row to headers, or demote the headers to a row",
+        "Replace Values" => "Replace values or errors in the selected columns",
+        "Merge Queries" => "Join another query's columns by matching key columns",
+        "Append Queries" => "Add the rows of other queries under this one",
+        "Manage Parameters" => "Values queries can refer to by name",
+        "Fill" => "Fill empty cells down or up from their neighbours",
+        "Unpivot Columns" => "Turn columns into attribute / value rows",
+        "Move" => "Move the selected columns left, right, to the beginning or the end",
+        "Statistics" => "Sum, minimum, maximum, average, count … of the selected column",
+        "Format" => "Lowercase, UPPERCASE, Capitalize, Trim, Clean, add a prefix or suffix",
+        "Extract" => "Length, first or last characters, a range, or text between delimiters",
+        "Parse" => "Read JSON or XML text into structured values",
+        "Standard" => "Add, subtract, multiply, divide, modulo, percentage …",
+        "Scientific" => "Absolute value, power, square root, exponent, logarithms, factorial",
+        "Rounding" => "Round up, round down or round to a number of digits",
+        "Information" => "Is even, is odd, sign",
+        "Date" => "Year, month, quarter, week, day, age, start or end of a period …",
+        "Time" => "Hour, minute, second, start or end of hour",
+        "Duration" => "Days, hours, minutes, seconds, total years …",
+        "Column From Examples" => "Type a few example results; the transformation is worked out for you",
+        "Index Column" => "A row number column, from 0, from 1 or custom",
+        "Go to Column" => "Select a column by name",
+        _ => "",
+    }
+}
+
+/// The ribbon icon of a command.
+fn icon_for(label: &str) -> Icon {
+    use crate::icons::Pq;
+    match label {
+        "New Source" => Icon::Pq(Pq::NewSource),
+        "Enter Data" => Icon::Pq(Pq::EnterData),
+        "Refresh Preview" => Icon::Pq(Pq::Refresh),
+        "Refresh All" => Icon::Pq(Pq::RefreshAll),
+        "Advanced Editor" => Icon::Pq(Pq::AdvancedEditor),
+        "Manage" => Icon::Pq(Pq::Manage),
+        "Choose Columns" => Icon::Pq(Pq::ChooseColumns),
+        "Remove Columns" => Icon::Pq(Pq::RemoveColumns),
+        "Keep Rows" => Icon::Pq(Pq::KeepRows),
+        "Remove Rows" => Icon::Pq(Pq::RemoveRows),
+        "Sort A→Z" => Icon::SortAsc,
+        "Sort Z→A" => Icon::SortDesc,
+        "Split Column" => Icon::Pq(Pq::SplitColumn),
+        "Group By" => Icon::Pq(Pq::GroupBy),
+        "Data Type" => Icon::Pq(Pq::DataType),
+        "Use First Row as Headers" => Icon::Pq(Pq::Headers),
+        "Replace Values" => Icon::Pq(Pq::Replace),
+        "Merge Queries" => Icon::Pq(Pq::MergeQueries),
+        "Append Queries" => Icon::Pq(Pq::AppendQueries),
+        "Combine Files" => Icon::Pq(Pq::CombineFiles),
+        "Manage Parameters" => Icon::Pq(Pq::Parameters),
+        "Close & Load To…" => Icon::Pq(Pq::CloseLoad),
+        "Transpose" => Icon::Pq(Pq::Transpose),
+        "Reverse Rows" => Icon::Pq(Pq::ReverseRows),
+        "Count Rows" => Icon::Pq(Pq::CountRows),
+        "Detect Data Type" => Icon::Pq(Pq::DetectType),
+        "Rename" => Icon::Pq(Pq::Rename),
+        "Fill" => Icon::FillDown,
+        "Pivot Column" => Icon::Pq(Pq::PivotColumn),
+        "Unpivot Columns" => Icon::Pq(Pq::Unpivot),
+        "Move" => Icon::Pq(Pq::MoveColumns),
+        "Convert to List" => Icon::Pq(Pq::ToList),
+        "Format" => Icon::Pq(Pq::Format),
+        "Merge Columns" => Icon::Merge,
+        "Extract" => Icon::Pq(Pq::Extract),
+        "Parse" => Icon::Pq(Pq::Parse),
+        "Statistics" => Icon::Sum,
+        "Standard" => Icon::Pq(Pq::Standard),
+        "Scientific" => Icon::Pq(Pq::Scientific),
+        "Rounding" => Icon::DecDec,
+        "Information" => Icon::Info,
+        "Date" => Icon::Calendar,
+        "Time" => Icon::Clock,
+        "Duration" => Icon::Pq(Pq::Duration),
+        "Expand" => Icon::Pq(Pq::ExpandColumn),
+        "Column From Examples" => Icon::Pq(Pq::FromExamples),
+        "Custom Column" => Icon::Pq(Pq::CustomColumn),
+        "Conditional Column" => Icon::Pq(Pq::Conditional),
+        "Index Column" => Icon::Pq(Pq::IndexColumn),
+        "Duplicate Column" => Icon::Copy,
+        "Query Dependencies" => Icon::Pq(Pq::Dependencies),
+        "Go to Column" => Icon::Pq(Pq::GoToColumn),
+        _ => Icon::Table,
+    }
 }
 
 /// The editor's ribbon for the active tab.
 pub fn ribbon(app: &mut SheetApp, ui: &mut Ui) {
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-        match app.powerquery.tab {
-            0 => home(app, ui),
-            1 => transform(app, ui),
-            2 => add_column(app, ui),
-            _ => view(app, ui),
-        }
+    // One row of groups; a narrow window scrolls it sideways (wheel or the thin bar).
+    egui::ScrollArea::horizontal().id_salt("pq_ribbon_scroll").show(ui, |ui| {
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(0.0, 4.0);
+            match app.powerquery.tab {
+                0 => home(app, ui),
+                1 => transform(app, ui),
+                2 => add_column(app, ui),
+                _ => view(app, ui),
+            }
+        });
     });
 }
 
 fn home(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("New Source", |ui| {
-        new_source_items(app, ui);
-    });
-    if big(ui, "Enter Data", "Type or paste a small table") {
-        app.powerquery.dialog = Some(Dialog::get_data("enter"));
-    }
-    gap(ui);
-    if big(ui, "Refresh Preview", "Recompute the preview") {
-        app.powerquery.refresh_preview();
-    }
-    if big(ui, "Refresh All", "Reload every loaded query") && run(app, "powerquery.refresh", json!({})).is_some() {
-        app.powerquery.refresh_preview();
-        toast(app, "Refreshed");
-    }
-    if big(ui, "Advanced Editor", "Edit the whole query in M") {
-        app.powerquery.dialog = Some(Dialog::advanced(app));
-    }
-    ui.menu_button("Manage", |ui| {
-        manage_items(app, ui);
-    });
-    gap(ui);
-    if big(ui, "Choose Columns", "Pick the columns to keep") {
-        app.powerquery.dialog = Some(Dialog::choose_columns(app));
-    }
-    ui.menu_button("Remove Columns", |ui| {
-        if ui.button("Remove Columns").clicked() {
-            remove_columns(app, false);
-            ui.close();
-        }
-        if ui.button("Remove Other Columns").clicked() {
-            remove_columns(app, true);
-            ui.close();
+    ribbon_group(ui, "New Query", |ui| {
+        ribbon_menu(ui, "New Source", |ui| {
+            new_source_items(app, ui);
+        });
+        if big(ui, "Enter Data", "Type or paste a small table") {
+            app.powerquery.dialog = Some(Dialog::get_data("enter"));
         }
     });
-    rows_menus(app, ui);
-    if big(ui, "Sort A→Z", "Sort ascending by the selected columns") {
-        sort(app, false);
-    }
-    if big(ui, "Sort Z→A", "Sort descending by the selected columns") {
-        sort(app, true);
-    }
-    gap(ui);
-    split_menu(app, ui);
-    if big(ui, "Group By", "Summarize rows by the values of columns") {
-        app.powerquery.dialog = Some(Dialog::group_by(app));
-    }
-    type_menu(app, ui);
-    headers_menu(app, ui);
-    if big(ui, "Replace Values", "Replace a value in the selected columns")
-        && let Some(c) = need_columns(app)
-    {
-        app.powerquery.dialog = Some(Dialog::replace(c));
-    }
-    gap(ui);
-    ui.menu_button("Merge Queries", |ui| {
-        if ui.button("Merge Queries").clicked() {
-            app.powerquery.dialog = Some(Dialog::merge(app, false));
-            ui.close();
+    ribbon_group(ui, "Query", |ui| {
+        if big(ui, "Refresh Preview", "Recompute the preview") {
+            app.powerquery.refresh_preview();
         }
-        if ui.button("Merge Queries as New").clicked() {
-            app.powerquery.dialog = Some(Dialog::merge(app, true));
-            ui.close();
+        if big(ui, "Refresh All", "Reload every loaded query") && run(app, "powerquery.refresh", json!({})).is_some() {
+            app.powerquery.refresh_preview();
+            toast(app, "Refreshed");
+        }
+        if big(ui, "Advanced Editor", "Edit the whole query in M") {
+            app.powerquery.dialog = Some(Dialog::advanced(app));
+        }
+        ribbon_menu(ui, "Manage", |ui| {
+            manage_items(app, ui);
+        });
+    });
+    ribbon_group(ui, "Reduce Rows & Columns", |ui| {
+        if big(ui, "Choose Columns", "Pick the columns to keep") {
+            app.powerquery.dialog = Some(Dialog::choose_columns(app));
+        }
+        ribbon_menu(ui, "Remove Columns", |ui| {
+            if ui.button("Remove Columns").clicked() {
+                remove_columns(app, false);
+                ui.close();
+            }
+            if ui.button("Remove Other Columns").clicked() {
+                remove_columns(app, true);
+                ui.close();
+            }
+        });
+        rows_menus(app, ui);
+        if big(ui, "Sort A→Z", "Sort ascending by the selected columns") {
+            sort(app, false);
+        }
+        if big(ui, "Sort Z→A", "Sort descending by the selected columns") {
+            sort(app, true);
         }
     });
-    ui.menu_button("Append Queries", |ui| {
-        if ui.button("Append Queries").clicked() {
-            app.powerquery.dialog = Some(Dialog::append(false));
-            ui.close();
+    ribbon_group(ui, "Transform", |ui| {
+        split_menu(app, ui);
+        if big(ui, "Group By", "Summarize rows by the values of columns") {
+            app.powerquery.dialog = Some(Dialog::group_by(app));
         }
-        if ui.button("Append Queries as New").clicked() {
-            app.powerquery.dialog = Some(Dialog::append(true));
-            ui.close();
-        }
-    });
-    if big(ui, "Combine Files", "Read every file of a folder query and append them") {
-        combine_files(app);
-    }
-    gap(ui);
-    ui.menu_button("Manage Parameters", |ui| {
-        if ui.button("Manage Parameters").clicked() {
-            app.powerquery.dialog = Some(Dialog::parameters(app, None));
-            ui.close();
-        }
-        if ui.button("New Parameter").clicked() {
-            app.powerquery.dialog = Some(Dialog::parameters(app, Some(String::new())));
-            ui.close();
+        type_menu(app, ui);
+        headers_menu(app, ui);
+        if big(ui, "Replace Values", "Replace a value in the selected columns")
+            && let Some(c) = need_columns(app)
+        {
+            app.powerquery.dialog = Some(Dialog::replace(c));
         }
     });
-    if big(ui, "Close & Load To…", "Choose where the query loads: a table, the data model, or connection only") {
-        app.powerquery.dialog = Some(Dialog::load_to(app));
-    }
+    ribbon_group(ui, "Combine", |ui| {
+        ribbon_menu(ui, "Merge Queries", |ui| {
+            if ui.button("Merge Queries").clicked() {
+                app.powerquery.dialog = Some(Dialog::merge(app, false));
+                ui.close();
+            }
+            if ui.button("Merge Queries as New").clicked() {
+                app.powerquery.dialog = Some(Dialog::merge(app, true));
+                ui.close();
+            }
+        });
+        ribbon_menu(ui, "Append Queries", |ui| {
+            if ui.button("Append Queries").clicked() {
+                app.powerquery.dialog = Some(Dialog::append(false));
+                ui.close();
+            }
+            if ui.button("Append Queries as New").clicked() {
+                app.powerquery.dialog = Some(Dialog::append(true));
+                ui.close();
+            }
+        });
+        if big(ui, "Combine Files", "Read every file of a folder query and append them") {
+            combine_files(app);
+        }
+    });
+    ribbon_group(ui, "Parameters & Load", |ui| {
+        ribbon_menu(ui, "Manage Parameters", |ui| {
+            if ui.button("Manage Parameters").clicked() {
+                app.powerquery.dialog = Some(Dialog::parameters(app, None));
+                ui.close();
+            }
+            if ui.button("New Parameter").clicked() {
+                app.powerquery.dialog = Some(Dialog::parameters(app, Some(String::new())));
+                ui.close();
+            }
+        });
+        if big(ui, "Close & Load To…", "Choose where the query loads: a table, the data model, or connection only") {
+            app.powerquery.dialog = Some(Dialog::load_to(app));
+        }
+    });
 }
 
 /// The New Source / Get Data items.
@@ -652,158 +788,182 @@ fn manage_items(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn transform(app: &mut SheetApp, ui: &mut Ui) {
-    if big(ui, "Group By", "Summarize rows by the values of columns") {
-        app.powerquery.dialog = Some(Dialog::group_by(app));
-    }
-    headers_menu(app, ui);
-    if big(ui, "Transpose", "Rows become columns") {
-        add_step(app, "Transposed Table", "Table.Transpose({prev})");
-    }
-    if big(ui, "Reverse Rows", "Last row first") {
-        add_step(app, "Reversed Rows", "Table.ReverseRows({prev})");
-    }
-    if big(ui, "Count Rows", "The number of rows") {
-        add_step(app, "Counted Rows", "Table.RowCount({prev})");
-    }
-    gap(ui);
-    type_menu(app, ui);
-    if big(ui, "Detect Data Type", "Set types from the data") {
-        detect_types(app);
-    }
-    if big(ui, "Rename", "Rename the selected column")
-        && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
-    {
-        app.powerquery.dialog = Some(Dialog::rename_column(&c));
-    }
-    ui.menu_button("Replace Values", |ui| {
-        if ui.button("Replace Values").clicked() {
-            if let Some(c) = need_columns(app) {
-                app.powerquery.dialog = Some(Dialog::replace(c));
-            }
-            ui.close();
+    ribbon_group(ui, "Table", |ui| {
+        if big(ui, "Group By", "Summarize rows by the values of columns") {
+            app.powerquery.dialog = Some(Dialog::group_by(app));
         }
-        if ui.button("Replace Errors").clicked() {
-            if let Some(c) = need_columns(app) {
-                app.powerquery.dialog = Some(Dialog::replace_errors(c));
-            }
-            ui.close();
+        headers_menu(app, ui);
+        if big(ui, "Transpose", "Rows become columns") {
+            add_step(app, "Transposed Table", "Table.Transpose({prev})");
+        }
+        if big(ui, "Reverse Rows", "Last row first") {
+            add_step(app, "Reversed Rows", "Table.ReverseRows({prev})");
+        }
+        if big(ui, "Count Rows", "The number of rows") {
+            add_step(app, "Counted Rows", "Table.RowCount({prev})");
         }
     });
-    fill_menu(app, ui);
-    if big(ui, "Pivot Column", "Turn the values of the selected column into columns")
-        && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
-    {
-        app.powerquery.dialog = Some(Dialog::pivot(app, &c));
-    }
-    unpivot_menu(app, ui);
-    move_menu(app, ui);
-    if big(ui, "Convert to List", "The selected column as a list")
-        && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
-    {
-        add_step(app, &c, &format!("{{prev}}{}", field(&c)));
-    }
-    gap(ui);
-    split_menu(app, ui);
-    op_menu(app, ui, "Format", false);
-    if big(ui, "Merge Columns", "Join the selected columns' text")
-        && let Some(c) = need_columns(app)
-    {
-        app.powerquery.dialog = Some(Dialog::merge_columns(c, false));
-    }
-    op_menu(app, ui, "Extract", false);
-    op_menu(app, ui, "Parse", false);
-    gap(ui);
-    statistics(app, ui);
-    op_menu(app, ui, "Standard", false);
-    op_menu(app, ui, "Scientific", false);
-    op_menu(app, ui, "Rounding", false);
-    op_menu(app, ui, "Information", false);
-    gap(ui);
-    op_menu(app, ui, "Date", false);
-    op_menu(app, ui, "Time", false);
-    op_menu(app, ui, "Duration", false);
-    gap(ui);
-    if big(ui, "Expand", "Expand the selected table, record or list column")
-        && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
-    {
-        app.powerquery.dialog = Some(Dialog::expand(app, &c));
-    }
+    ribbon_group(ui, "Any Column", |ui| {
+        type_menu(app, ui);
+        if big(ui, "Detect Data Type", "Set types from the data") {
+            detect_types(app);
+        }
+        if big(ui, "Rename", "Rename the selected column")
+            && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
+        {
+            app.powerquery.dialog = Some(Dialog::rename_column(&c));
+        }
+        ribbon_menu(ui, "Replace Values", |ui| {
+            if ui.button("Replace Values").clicked() {
+                if let Some(c) = need_columns(app) {
+                    app.powerquery.dialog = Some(Dialog::replace(c));
+                }
+                ui.close();
+            }
+            if ui.button("Replace Errors").clicked() {
+                if let Some(c) = need_columns(app) {
+                    app.powerquery.dialog = Some(Dialog::replace_errors(c));
+                }
+                ui.close();
+            }
+        });
+        fill_menu(app, ui);
+        if big(ui, "Pivot Column", "Turn the values of the selected column into columns")
+            && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
+        {
+            app.powerquery.dialog = Some(Dialog::pivot(app, &c));
+        }
+        unpivot_menu(app, ui);
+        move_menu(app, ui);
+        if big(ui, "Convert to List", "The selected column as a list")
+            && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
+        {
+            add_step(app, &c, &format!("{{prev}}{}", field(&c)));
+        }
+    });
+    ribbon_group(ui, "Text Column", |ui| {
+        split_menu(app, ui);
+        op_menu(app, ui, "Format", false);
+        if big(ui, "Merge Columns", "Join the selected columns' text")
+            && let Some(c) = need_columns(app)
+        {
+            app.powerquery.dialog = Some(Dialog::merge_columns(c, false));
+        }
+        op_menu(app, ui, "Extract", false);
+        op_menu(app, ui, "Parse", false);
+    });
+    ribbon_group(ui, "Number Column", |ui| {
+        statistics(app, ui);
+        op_menu(app, ui, "Standard", false);
+        op_menu(app, ui, "Scientific", false);
+        op_menu(app, ui, "Rounding", false);
+        op_menu(app, ui, "Information", false);
+    });
+    ribbon_group(ui, "Date & Time", |ui| {
+        op_menu(app, ui, "Date", false);
+        op_menu(app, ui, "Time", false);
+        op_menu(app, ui, "Duration", false);
+    });
+    ribbon_group(ui, "Structured", |ui| {
+        if big(ui, "Expand", "Expand the selected table, record or list column")
+            && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
+        {
+            app.powerquery.dialog = Some(Dialog::expand(app, &c));
+        }
+    });
 }
 
 fn add_column(app: &mut SheetApp, ui: &mut Ui) {
-    ui.menu_button("Column From Examples", |ui| {
-        if ui.button("From All Columns").clicked() {
-            app.powerquery.examples = Some(super::Examples { name: "Custom".into(), ..Default::default() });
-            ui.close();
-        }
-        if ui.button("From Selection").clicked() {
-            if let Some(c) = need_columns(app) {
-                app.powerquery.examples = Some(super::Examples { name: "Custom".into(), inputs: c, ..Default::default() });
+    ribbon_group(ui, "General", |ui| {
+        ribbon_menu(ui, "Column From Examples", |ui| {
+            if ui.button("From All Columns").clicked() {
+                app.powerquery.examples = Some(super::Examples { name: "Custom".into(), ..Default::default() });
+                ui.close();
             }
-            ui.close();
+            if ui.button("From Selection").clicked() {
+                if let Some(c) = need_columns(app) {
+                    app.powerquery.examples = Some(super::Examples { name: "Custom".into(), inputs: c, ..Default::default() });
+                }
+                ui.close();
+            }
+        });
+        if big(ui, "Custom Column", "A new column computed by an M formula") {
+            app.powerquery.dialog = Some(Dialog::custom_column(app));
+        }
+        if big(ui, "Conditional Column", "If … then … else rules") {
+            app.powerquery.dialog = Some(Dialog::conditional(app));
+        }
+        index_menu(app, ui);
+        if big(ui, "Duplicate Column", "Copy the selected column")
+            && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
+        {
+            add_step(
+                app,
+                "Duplicated Column",
+                &format!("Table.DuplicateColumn({{prev}}, {}, {})", quote_text(&c), quote_text(&format!("{c} - Copy"))),
+            );
         }
     });
-    if big(ui, "Custom Column", "A new column computed by an M formula") {
-        app.powerquery.dialog = Some(Dialog::custom_column(app));
-    }
-    if big(ui, "Conditional Column", "If … then … else rules") {
-        app.powerquery.dialog = Some(Dialog::conditional(app));
-    }
-    index_menu(app, ui);
-    if big(ui, "Duplicate Column", "Copy the selected column")
-        && let Some(c) = need_columns(app).and_then(|c| c.first().cloned())
-    {
-        add_step(app, "Duplicated Column", &format!("Table.DuplicateColumn({{prev}}, {}, {})", quote_text(&c), quote_text(&format!("{c} - Copy"))));
-    }
-    gap(ui);
-    op_menu(app, ui, "Format", true);
-    op_menu(app, ui, "Extract", true);
-    if big(ui, "Merge Columns", "A new column joining the selected columns' text")
-        && let Some(c) = need_columns(app)
-    {
-        app.powerquery.dialog = Some(Dialog::merge_columns(c, true));
-    }
-    op_menu(app, ui, "Parse", true);
-    gap(ui);
-    op_menu(app, ui, "Standard", true);
-    op_menu(app, ui, "Scientific", true);
-    op_menu(app, ui, "Rounding", true);
-    op_menu(app, ui, "Information", true);
-    gap(ui);
-    op_menu(app, ui, "Date", true);
-    op_menu(app, ui, "Time", true);
-    op_menu(app, ui, "Duration", true);
+    ribbon_group(ui, "From Text", |ui| {
+        op_menu(app, ui, "Format", true);
+        op_menu(app, ui, "Extract", true);
+        if big(ui, "Merge Columns", "A new column joining the selected columns' text")
+            && let Some(c) = need_columns(app)
+        {
+            app.powerquery.dialog = Some(Dialog::merge_columns(c, true));
+        }
+        op_menu(app, ui, "Parse", true);
+    });
+    ribbon_group(ui, "From Number", |ui| {
+        op_menu(app, ui, "Standard", true);
+        op_menu(app, ui, "Scientific", true);
+        op_menu(app, ui, "Rounding", true);
+        op_menu(app, ui, "Information", true);
+    });
+    ribbon_group(ui, "From Date & Time", |ui| {
+        op_menu(app, ui, "Date", true);
+        op_menu(app, ui, "Time", true);
+        op_menu(app, ui, "Duration", true);
+    });
 }
 
 fn view(app: &mut SheetApp, ui: &mut Ui) {
-    let v = &mut app.powerquery.view;
-    ui.checkbox(&mut v.formula_bar, "Formula Bar");
-    ui.checkbox(&mut v.monospace, "Monospaced");
-    ui.checkbox(&mut v.whitespace, "Show Whitespace");
-    gap(ui);
-    ui.checkbox(&mut v.quality, "Column Quality");
-    ui.checkbox(&mut v.distribution, "Column Distribution");
-    ui.checkbox(&mut v.profile, "Column Profile");
-    let mut all = v.all_rows;
-    if ui.checkbox(&mut all, "Profile Entire Data Set").on_hover_text("Off: column profiling uses the top 1000 rows").changed() {
-        app.powerquery.view.all_rows = all;
-    }
-    gap(ui);
-    if big(ui, "Query Dependencies", "How queries, sources and loads connect") {
-        app.powerquery.deps = true;
-    }
-    if big(ui, "Advanced Editor", "Edit the whole query in M") {
-        app.powerquery.dialog = Some(Dialog::advanced(app));
-    }
-    ui.menu_button("Go to Column", |ui| {
-        let cols = app.powerquery.preview(&app.session).map(|p| p.table.columns.clone()).unwrap_or_default();
-        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-            for c in cols {
-                if ui.button(&c).clicked() {
-                    app.powerquery.selected = vec![c];
-                    ui.close();
+    use crate::icons::Pq;
+    let toggle = |ui: &mut Ui, icon: Icon, label: &str, tip: &str, on: &mut bool| {
+        if icon_tool(ui, icon, label, tip, false, *on).clicked() {
+            *on = !*on;
+        }
+    };
+    ribbon_group(ui, "Layout", |ui| {
+        let v = &mut app.powerquery.view;
+        toggle(ui, Icon::Fx, "Formula Bar", "Show the selected step's M formula above the preview", &mut v.formula_bar);
+        toggle(ui, Icon::Pq(Pq::Monospace), "Monospaced", "Show the preview in a fixed-width font", &mut v.monospace);
+        toggle(ui, Icon::Pq(Pq::Whitespace), "Show Whitespace", "Mark spaces and line breaks in the preview", &mut v.whitespace);
+    });
+    ribbon_group(ui, "Data Preview", |ui| {
+        let v = &mut app.powerquery.view;
+        toggle(ui, Icon::Pq(Pq::Quality), "Column Quality", "Valid, error and empty percentages under each header", &mut v.quality);
+        toggle(ui, Icon::ChartBar, "Column Distribution", "Distinct and unique counts with a small histogram under each header", &mut v.distribution);
+        toggle(ui, Icon::Pq(Pq::Profile), "Column Profile", "Statistics and value distribution of the selected column", &mut v.profile);
+        toggle(ui, Icon::Pq(Pq::AllRows), "Profile Entire Data Set", "Off: column profiling uses the top 1000 rows", &mut v.all_rows);
+    });
+    ribbon_group(ui, "Dependencies & Columns", |ui| {
+        if big(ui, "Query Dependencies", "How queries, sources and loads connect") {
+            app.powerquery.deps = true;
+        }
+        if big(ui, "Advanced Editor", "Edit the whole query in M") {
+            app.powerquery.dialog = Some(Dialog::advanced(app));
+        }
+        ribbon_menu(ui, "Go to Column", |ui| {
+            let cols = app.powerquery.preview(&app.session).map(|p| p.table.columns.clone()).unwrap_or_default();
+            egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                for c in cols {
+                    if ui.button(&c).clicked() {
+                        app.powerquery.selected = vec![c];
+                        ui.close();
+                    }
                 }
-            }
+            });
         });
     });
 }

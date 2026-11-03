@@ -487,7 +487,7 @@ fn drag_ghost(ui: &Ui, t: &Tokens, f: &PivotForm) {
 }
 
 /// The report preview, or how to start one.
-fn preview(ui: &mut Ui, t: &Tokens, m: &Model, f: &mut PivotForm, h: f32) {
+fn preview(ui: &mut Ui, t: &Tokens, m: &Model, f: &mut PivotForm, w: f32, h: f32) {
     let spec = f.spec();
     let key = format!("{:?}|{:?}|{:?}|{:?}", spec.rows, spec.columns, spec.values, spec.filters);
     if f.preview.as_ref().is_none_or(|(k, _)| *k != key) {
@@ -501,7 +501,10 @@ fn preview(ui: &mut Ui, t: &Tokens, m: &Model, f: &mut PivotForm, h: f32) {
         f.preview = Some((key, r));
     }
     egui::Frame::NONE.fill(t.grid_bg).stroke(Stroke::new(1.0, t.input_border)).corner_radius(4.0).inner_margin(10.0).show(ui, |ui| {
-        ui.set_min_size(vec2(ui.available_width(), h));
+        // A fixed size: sizing from the space available would feed the window's own width back
+        // into itself and widen it a little every frame.
+        ui.set_width(w - 22.0);
+        ui.set_min_height(h);
         match f.preview.as_ref().map(|(_, r)| r) {
             Some(Ok(g)) => preview_grid(ui, t, g, h),
             Some(Err(e)) if !e.is_empty() => {
@@ -524,14 +527,20 @@ fn preview(ui: &mut Ui, t: &Tokens, m: &Model, f: &mut PivotForm, h: f32) {
 pub(super) fn pivot(app: &mut SheetApp, ctx: &egui::Context, t: &Tokens, m: &Model, f: &mut PivotForm) -> bool {
     let mut keep = true;
     let mut actions: Vec<Action> = Vec::new();
-    fit(window("PivotTable from Data Model"), ctx, vec2(1120.0, 700.0)).show(ctx, |ui| {
-        let body_h = (ctx.content_rect().height() - 200.0).clamp(380.0, 640.0);
+    // Every width here is fixed from the screen size, never from the space available, so the
+    // window keeps its size frame after frame.
+    let screen = ctx.content_rect();
+    let pane_w = 330.0;
+    let total_w = (screen.width() - 80.0).clamp(720.0, 1120.0);
+    let preview_w = total_w - pane_w - 12.0;
+    fit(window("PivotTable from Data Model").resizable(false), ctx, vec2(total_w + 20.0, 700.0)).show(ctx, |ui| {
+        ui.set_width(total_w);
+        let body_h = (screen.height() - 200.0).clamp(380.0, 640.0);
         ui.horizontal_top(|ui| {
-            let pane_w = 330.0;
             ui.vertical(|ui| {
-                ui.set_width((ui.available_width() - pane_w - 16.0).max(320.0));
+                ui.set_width(preview_w);
                 ui.label(RichText::new("PivotTable").strong());
-                preview(ui, t, m, f, body_h - 4.0);
+                preview(ui, t, m, f, preview_w, body_h - 4.0);
             });
             ui.add_space(12.0);
             ui.vertical(|ui| {
